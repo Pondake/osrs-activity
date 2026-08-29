@@ -14,9 +14,8 @@ blueprint:
     fighting it for the screen.
 
 
-    Needs the `osrs_activity` and `divoom_pixoo` integrations. Run
-    `osrs_activity.download_skill_icons` once first, or the skill icon is a
-    transparent square.
+    Needs the `osrs_activity` integration and `gickowtf/pixoo-homeassistant`,
+    which is in the default HACS store.
   domain: script
   homeassistant:
     min_version: "2024.6.0"

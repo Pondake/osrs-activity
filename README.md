@@ -200,7 +200,7 @@ result would look like an integration that just does not work.
 
 ## The screens
 
-Three screens on a [Divoom Pixoo 64](https://github.com/Faisalthe01/divoom_pixoo),
+Three screens on a [Divoom Pixoo 64](https://github.com/gickowtf/pixoo-homeassistant),
 chosen automatically from what the sensors report:
 
 | When | Screen |
@@ -258,7 +258,8 @@ Built on [**db1996/homeassistant_runelite**](https://github.com/db1996/homeassis
 and its RuneLite plugin, which do all the talking to the game.
 
 Pixoo drawing goes through
-[**Faisalthe01/divoom_pixoo**](https://github.com/Faisalthe01/divoom_pixoo).
+[**gickowtf/pixoo-homeassistant**](https://github.com/gickowtf/pixoo-homeassistant),
+which is in the default HACS store.
 
 Icons are from the [OSRS Wiki](https://oldschool.runescape.wiki), used under
 their licence. Old School RuneScape is a trademark of Jagex Ltd; this is an
