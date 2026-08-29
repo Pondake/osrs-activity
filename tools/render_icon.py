@@ -124,7 +124,8 @@ def main() -> int:
         if edge not in cache:
             cache[edge] = render(SOURCE, edge)
         path.parent.mkdir(parents=True, exist_ok=True)
-        cache[edge].save(path)
+        # brands asks for lossless but properly compressed files.
+        cache[edge].save(path, optimize=True)
         print(f"  {path.relative_to(ROOT)}  {edge}x{edge}")
     return 0
 
