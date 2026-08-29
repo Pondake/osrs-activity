@@ -3,6 +3,11 @@
 A scanner that always says "clean" is worse than no scanner, because it buys
 confidence it has not earned. These plant each kind of finding and check it is
 caught, and check the things that legitimately appear in this repo are not.
+
+The fixtures below include a fake API key and a fake JWT, so this file is
+allowlisted by path in .gitleaks.toml. gitleaks is right about them; they have
+to stay anyway, because a scanner whose tests contain nothing to find proves
+nothing.
 """
 
 from __future__ import annotations

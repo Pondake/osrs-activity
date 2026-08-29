@@ -65,4 +65,4 @@ jobs:
           VERSION: 8.24.3
         run: |
           curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"             | tar -xz -C /tmp gitleaks
-          /tmp/gitleaks git . --redact --verbose
+          /tmp/gitleaks git . --config .gitleaks.toml --redact --verbose

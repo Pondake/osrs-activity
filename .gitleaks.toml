@@ -1,0 +1,18 @@
+# gitleaks runs alongside tools/scan_leaks.py in CI. It catches the things a
+# hand-written rule list never will; this file only tells it about the one
+# place where finding something is the point.
+
+title = "osrs-activity"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+tests/test_scan_leaks.py holds one example of every kind of finding the
+publishing guard is supposed to catch, including a fake API key and a fake
+JWT. gitleaks is right about them and they still have to stay: a scanner
+whose tests contain nothing to find proves nothing. Allowlisted by path so
+the exemption cannot quietly widen to another file.
+"""
+paths = ['''tests/test_scan_leaks\.py''']
