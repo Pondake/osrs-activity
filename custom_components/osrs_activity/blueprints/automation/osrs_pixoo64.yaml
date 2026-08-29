@@ -75,6 +75,15 @@ blueprint:
             entity:
               integration: runelite
               domain: sensor
+    standby:
+      name: Standby screen
+      description: >-
+        What to draw while you are logged in but nothing is gaining XP. On, you
+        get your name with health and prayer. Off, the panel is left exactly as
+        it was, which is what you want if another automation shares it.
+      default: true
+      selector:
+        boolean:
     styling:
       name: Styling
       icon: mdi:palette
@@ -128,6 +137,7 @@ variables:
   bg: !input background
   accent: !input accent
   floor: !input min_interval
+  standby: !input standby
 
   rows: "{{ state_attr(activity, 'skills') or [] }}"
   top: "{{ state_attr(activity, 'top') or {} }}"
@@ -137,6 +147,8 @@ variables:
   idle: "{{ state_attr(activity, 'idle') | default(false, true) }}"
   gained: "{{ state_attr(activity, 'total_gained_short') | default('0', true) }}"
   per_hour: "{{ state_attr(activity, 'per_hour') | int(0) }}"
+  online: "{{ state_attr(activity, 'online') | default(false, true) }}"
+  account: "{{ state_attr(activity, 'account') | default('OSRS', true) }}"
 
   # -1 means "not configured", which draws in the background colour and so
   # draws nothing. Kept out of the components themselves because the same
@@ -159,8 +171,10 @@ variables:
     {% elif p > 25 %}[255,180,0]{% else %}[255,40,40]{% endif %}
 
 actions:
+  # Nothing training and no standby screen means leave the panel alone, so
+  # another automation can own it without this one blanking it.
   - condition: template
-    value_template: "{{ active >= 1 }}"
+    value_template: "{{ active >= 1 or (standby and online) }}"
 
   - choose:
       # ---------------------------------------------------------------- combat
@@ -331,6 +345,74 @@ actions:
                     font: PICO_8
                     color: [140, 120, 90]
                     align: right
+
+      # ------------------------------------------------------- standby
+      # Logged in, nothing training. Your name and your bars, so the panel
+      # says something between sessions instead of going blank.
+      - conditions: "{{ active < 1 }}"
+        sequence:
+          - action: divoom_pixoo.show_message
+            target:
+              entity_id: !input panel
+            data:
+              page_data:
+                page_type: components
+                components:
+                  - type: rectangle
+                    position: [0, 0]
+                    size: [64, 64]
+                    color: "{{ bg }}"
+                    filled: true
+                  - type: rectangle
+                    position: [0, 0]
+                    size: ["{{ [ [ ((hp_pct | int(0)) * 0.64) | round | int, 1 ] | max, 64 ] | min }}", 2]
+                    color: "{{ hp_color }}"
+                    filled: true
+                  - type: text
+                    content: "{{ account }}"
+                    position: [2, 5]
+                    font: PICO_8
+                    color: "{{ accent }}"
+                  - type: rectangle
+                    position: [0, 13]
+                    size: [64, 1]
+                    color: [90, 74, 54]
+                    filled: true
+                  - type: text
+                    content: "{% if idle %}IDLE{% else %}ONLINE{% endif %}"
+                    position: [2, 22]
+                    font: PICO_8
+                    color: "{% if idle %}[255,180,0]{% else %}[140,200,255]{% endif %}"
+                  - type: text
+                    content: HP
+                    position: [2, 45]
+                    font: PICO_8
+                    color: [200, 170, 120]
+                  - type: rectangle
+                    position: [22, 44]
+                    size: [40, 7]
+                    color: [72, 60, 44]
+                    filled: true
+                  - type: rectangle
+                    position: [22, 44]
+                    size: ["{{ [ [ ((hp_pct | int(0)) * 0.4) | round | int, 1 ] | max, 40 ] | min }}", 7]
+                    color: "{{ hp_color }}"
+                    filled: true
+                  - type: text
+                    content: PRAY
+                    position: [2, 55]
+                    font: PICO_8
+                    color: [200, 170, 120]
+                  - type: rectangle
+                    position: [22, 54]
+                    size: [40, 7]
+                    color: [72, 60, 44]
+                    filled: true
+                  - type: rectangle
+                    position: [22, 54]
+                    size: ["{{ [ [ ((pray_pct | int(0)) * 0.4) | round | int, 1 ] | max, 40 ] | min }}", 7]
+                    color: "{% if (pray_pct | int(-1)) < 0 %}{{ bg }}{% else %}[140,200,255]{% endif %}"
+                    filled: true
 
     # ------------------------------------------------------------------- bars
     # Anything else: up to five skills, each with a bar scaled against the

@@ -198,7 +198,8 @@ chosen automatically from what the sensors report:
 |---|---|
 | everything gaining XP is a combat skill | attack style, total gained, rate, HP and prayer bars |
 | one skill in focus | that skill, gained, rate, and the bar to the next level |
-| anything else | up to five skills, bars scaled against the biggest gainer |
+| more than one skill | up to five, bars scaled against the biggest gainer |
+| logged in, nothing training | your name, health and prayer |
 
 The bars scale against the biggest gainer *inside the focus* rather than
 against an absolute figure. That makes a combat sitting read as a ratio
@@ -208,8 +209,9 @@ and for Zulrah without a special case for either.
 Health and prayer are optional inputs; leave them empty and those bars are
 simply not drawn. Background and accent are colour pickers.
 
-When nothing is gaining XP the script does nothing and leaves whatever is on
-the panel alone, so it can share a Pixoo with your other automations.
+That last one is a switch. On, the panel says something between sessions
+instead of going dark. Off, nothing is drawn at all while you are not
+training, which is what you want if another automation shares the panel.
 
 > **Before you raise the refresh rate:** [docs/pixoo.md](docs/pixoo.md) has the
 > measured limits of the device. Short version — it does not crash under load,
