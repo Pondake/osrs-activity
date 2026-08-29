@@ -27,11 +27,11 @@ SOURCE = ROOT / "assets" / "icon.svg"
 # to be cropped from.
 BRAND = ROOT / "custom_components" / "osrs_activity" / "brand"
 OUTPUTS = {
-    # Where HACS looks for a repository's own brand assets, and the sizes the
-    # home-assistant/brands repository asks for. Home Assistant itself does not
-    # read these -- its frontend fetches icons from brands.home-assistant.io,
-    # which needs a pull request there. These make HACS's check pass and are
-    # the files that pull request wants.
+    # brand/ is where both Home Assistant and HACS look for a custom
+    # integration's own icons. Since 2026.3 the frontend serves these through a
+    # local proxy and they take priority over the brands CDN, so no submission
+    # to home-assistant/brands is needed -- that repository stopped accepting
+    # custom integrations for exactly this reason.
     BRAND / "icon.png": 256,
     BRAND / "icon@2x.png": 512,
     ROOT / "assets" / "icon-256.png": 256,
