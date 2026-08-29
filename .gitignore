@@ -7,3 +7,6 @@ __pycache__/
 .idea/
 .vscode/
 .DS_Store
+
+# Names to block but not to publish. See tools/private_words.txt.
+tools/private_words.local.txt

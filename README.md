@@ -1,5 +1,9 @@
 # OSRS Activity
 
+[![HACS: custom repository](https://img.shields.io/badge/HACS-custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories/)
+[![Validate](https://github.com/Pondake/osrs-activity/actions/workflows/validate.yml/badge.svg)](https://github.com/Pondake/osrs-activity/actions/workflows/validate.yml)
+[![Open your Home Assistant instance and open this repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Pondake&repository=osrs-activity&category=integration)
+
 A Home Assistant integration that answers one question: **what is this Old
 School RuneScape player doing right now?**
 
@@ -80,9 +84,16 @@ anything.
 
 ## Install
 
-HACS → three dots → **Custom repositories** → `https://github.com/Pondake/osrs-activity`,
-category **Integration**. Then add **OSRS Activity** from *Settings → Devices &
+Click the badge at the top, or do it by hand: HACS → three dots → **Custom
+repositories** → `https://github.com/Pondake/osrs-activity`, category
+**Integration**. Then add **OSRS Activity** from *Settings → Devices &
 services*, and pick your player from the dropdown.
+
+The badge is a [My Home Assistant](https://my.home-assistant.io) link, which
+works for custom repositories as well as for ones in the default store — that
+is what the `category` parameter in it is for. It opens HACS on your own
+instance and offers to add this repository; it cannot install anything by
+itself.
 
 The player list comes from the RuneLite integration rather than a text box on
 purpose: a typo would silently match no skill sensors at all, and the result

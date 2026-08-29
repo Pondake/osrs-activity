@@ -4,6 +4,11 @@
 #
 # This file is not itself scanned -- it cannot be, it is the list. Keep it to
 # words, never to secrets: it is published along with everything else.
+#
+# Names you do NOT want published -- a company, a surname, a network name --
+# belong in private_words.local.txt beside this file. That one is ignored by
+# git and read in addition to this list, so blocking a name never means
+# publishing it.
 
 kantoor
 washok

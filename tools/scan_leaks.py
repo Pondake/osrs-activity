@@ -80,15 +80,22 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
 # every word it knows -- which is why that one file, and the test fixtures, are
 # the only paths exempt below.
 WORDS_FILE = Path(__file__).with_name("private_words.txt")
+# Names that must be blocked but must NOT be published -- a company, a
+# surname, a network name. Git ignores this one, so blocking a name never
+# means publishing it.
+LOCAL_WORDS_FILE = Path(__file__).with_name("private_words.local.txt")
 
 
 def _private_words() -> list[str]:
-    lines = WORDS_FILE.read_text(encoding="utf-8").splitlines()
-    return [
-        line.strip()
-        for line in lines
-        if line.strip() and not line.startswith("#")
-    ]
+    words = []
+    for source in (WORDS_FILE, LOCAL_WORDS_FILE):
+        if not source.exists():
+            continue
+        for line in source.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                words.append(re.escape(line))
+    return words
 
 
 # A word boundary is no good here: an entity id looks like
@@ -107,7 +114,11 @@ RULES.append(
 # Exempt by name, and only these. The word list IS the words; the test file's
 # whole job is to hold one example of every finding. Anything else that matches
 # has to say so on the line with `scan-leaks: allow`.
-SELF_EXEMPT = {"tools/private_words.txt", "tests/test_scan_leaks.py"}
+SELF_EXEMPT = {
+    "tools/private_words.txt",
+    "tools/private_words.local.txt",
+    "tests/test_scan_leaks.py",
+}
 
 SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2", ".pyc"}
 
