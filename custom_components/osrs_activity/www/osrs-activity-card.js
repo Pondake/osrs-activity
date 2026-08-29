@@ -32,10 +32,12 @@ class OsrsActivityCard extends HTMLElement {
   }
 
   static getStubConfig(hass) {
-    // Prefer this integration's own payload sensor, so dropping the card on a
-    // dashboard produces something rather than an error.
-    const match = Object.keys(hass.states).find((id) =>
-      id.startsWith("sensor.") && id.endsWith("_xp_session"),
+    // Found by what it carries rather than by what it is called: the entity id
+    // depends on the player's name and on which release created it.
+    const match = Object.keys(hass.states).find(
+      (id) =>
+        id.startsWith("sensor.") &&
+        hass.states[id].attributes?.window_skills !== undefined,
     );
     return { entity: match || "" };
   }
@@ -125,6 +127,14 @@ class OsrsActivityCard extends HTMLElement {
     }
 
     const a = state.attributes;
+    if (a.window_skills === undefined) {
+      // Almost certainly the "XP gained" sensor, which is one line away in the
+      // picker and holds a total rather than the whole picture.
+      this._panel.innerHTML = `<div class="err">${esc(
+        this._config.entity,
+      )} is not the Activity sensor</div>`;
+      return;
+    }
     const rows = a.skills || [];
     const idle = Boolean(a.idle);
 

@@ -61,9 +61,15 @@ class StoredSessions(ExtraStoredData):
 
 
 class XpSessionSensor(OsrsActivityEntity, SensorEntity, RestoreEntity):
-    """How many skills have a live counter, plus everything behind that."""
+    """How many skills have a live counter, plus everything behind that.
 
-    _attr_icon = "mdi:sword-cross"
+    This is the one to point a display at: the whole picture is in its
+    attributes. It is called Activity rather than anything with XP in it
+    because "XP session" and "Session XP" next to each other in an entity
+    picker is a trap, and one that has already been walked into.
+    """
+
+    _attr_icon = "mdi:run"
 
     def __init__(self, coordinator: ActivityCoordinator) -> None:
         super().__init__(coordinator, "xp_session")

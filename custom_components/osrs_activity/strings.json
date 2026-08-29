@@ -38,13 +38,13 @@
   "entity": {
     "sensor": {
       "xp_session": {
-        "name": "XP session"
+        "name": "Activity"
       },
       "focus_skill": {
         "name": "Focus skill"
       },
       "session_xp": {
-        "name": "Session XP"
+        "name": "XP gained"
       },
       "xp_per_hour": {
         "name": "XP per hour"

@@ -26,15 +26,16 @@ One device per player, with seven entities.
 
 | Entity | State | Good for |
 |---|---|---|
-| `sensor.<player>_xp_session` | how many skills have a live counter | everything — the full picture is in its attributes |
-| `sensor.<player>_focus_skill` | `mining`, `slayer`, … | "what am I training" |
-| `sensor.<player>_session_xp` | XP gained this sitting | a graph of your evening |
-| `sensor.<player>_xp_per_hour` | rate, from the start of the sitting | is this method actually faster |
-| `sensor.<player>_combat_style` | `AGGRESSIVE`, `RANGED`, `Slayin'`, … | switching a light when you switch styles |
-| `binary_sensor.<player>_idle` | on when you are standing around | a nudge when you have been afk for a while |
-| `binary_sensor.<player>_online` | on while the plugin is still pushing | knowing you logged out, without polling |
+| **Activity** | how many skills have a live counter | everything — the full picture is in its attributes |
+| **Focus skill** | `mining`, `slayer`, … | "what am I training" |
+| **XP gained** | XP gained this sitting | a graph of your evening |
+| **XP per hour** | rate, from the start of the sitting | is this method actually faster |
+| **Combat style** | `AGGRESSIVE`, `RANGED`, `Slayin'`, … | switching a light when you switch styles |
+| **Idle** | on when you are standing around | a nudge when you have been afk for a while |
+| **Online** | on while the plugin is still pushing | knowing you logged out, without polling |
 
-The XP session sensor is the one to template against. Its attributes carry
+**Activity** is the one to point a display at, and the one both the card and
+the blueprint want. Its attributes carry
 `skills` (what is happening now), `window_skills` (everything with a counter
 still running), `top`, `combat`, `style`, `slayer_kills`, `total_gained_short`
 and the idle state — and every skill row comes with a label that fits in four
@@ -42,10 +43,10 @@ characters, a colour, a percentage through the current level, and a path to its
 icon.
 
 ```jinja
-{{ state_attr('sensor.player_xp_session', 'top').gained_short }}   → "12.3k"
-{{ state_attr('sensor.player_xp_session', 'style') }}              → "AGGRESSIVE"
-{{ state_attr('sensor.player_xp_session', 'skills')
-   | map(attribute='label') | join(' ') }}                          → "STR ATT HP"
+{{ state_attr('sensor.player_activity', 'top').gained_short }}   → "12.3k"
+{{ state_attr('sensor.player_activity', 'style') }}              → "AGGRESSIVE"
+{{ state_attr('sensor.player_activity', 'skills')
+   | map(attribute='label') | join(' ') }}                        → "STR ATT HP"
 ```
 
 You do not have to touch any of that, though. **A dashboard card comes with the
@@ -159,7 +160,7 @@ Pixoo page fail to render rather than just the image.
 
 *Settings → Automations & scenes → Blueprints* → **OSRS XP on a Pixoo 64** →
 *Create automation*. It is already in the list; there is no URL to paste. Pick
-your Pixoo and your XP session sensor, optionally your health and prayer
+your Pixoo and the **Activity** sensor, optionally your health and prayer
 sensors, and save.
 
 That is all — it redraws itself whenever the sensor changes, and the sensor

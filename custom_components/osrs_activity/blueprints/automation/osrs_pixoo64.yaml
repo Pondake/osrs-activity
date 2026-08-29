@@ -32,8 +32,11 @@ blueprint:
           integration: divoom_pixoo
           domain: sensor
     activity:
-      name: XP session sensor
-      description: The "XP session" sensor from OSRS Activity, for the player you want on the panel.
+      name: Activity sensor
+      description: >-
+        The "Activity" sensor from OSRS Activity — the one whose state is a
+        number of skills. Not "XP gained"; that one holds a total and this will
+        refuse to draw from it.
       selector:
         entity:
           integration: osrs_activity
@@ -171,6 +174,12 @@ variables:
     {% elif p > 25 %}[255,180,0]{% else %}[255,40,40]{% endif %}
 
 actions:
+  # Every screen below reads the Activity sensor's attributes, so a sensor
+  # without them is the wrong one and drawing from it produces nonsense rather
+  # than nothing. Checked first, before anything is put on the panel.
+  - condition: template
+    value_template: "{{ state_attr(activity, 'window_skills') is not none }}"
+
   # Nothing training and no standby screen means leave the panel alone, so
   # another automation can own it without this one blanking it.
   - condition: template
