@@ -20,6 +20,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import ActivityCoordinator
+from .frontend import async_register_card
 from .icons import async_download_icons, async_ensure_icons
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_reload))
 
     _register_services(hass)
+    await async_register_card(hass)
     # Both of these make the integration work out of the box rather than after
     # reading the readme, and neither is allowed to hold setup up or fail it:
     # no network, no write permission, still a working integration.

@@ -17,10 +17,10 @@ have a live counter, how fast each is climbing, which one you are focused on,
 and — when it is all combat — which attack style you are using, read off from
 which of attack, strength and defence are ticking.
 
-Nothing here knows about any particular display. It publishes sensors; what you
-do with them is up to you. There is [a blueprint for a Pixoo 64](#the-screens)
-in this repo because that is what it was built for, but a dashboard card is
-just as valid a consumer.
+Two ways to look at it ship with it: a **dashboard card**, and a **blueprint
+for a Divoom Pixoo 64**. Neither is a separate install and neither is required
+— the sensors stand on their own, and the engine that fills them has no idea
+either exists.
 
 ---
 
@@ -50,6 +50,14 @@ icon.
 {{ state_attr('sensor.player_xp_session', 'skills')
    | map(attribute='label') | join(' ') }}                          → "STR ATT HP"
 ```
+
+You do not have to touch any of that, though. **A dashboard card comes with the
+integration** — it appears in the card picker as *OSRS Activity*, takes one
+entity, and shows the same thing the panel does: the skill or the attack style,
+what you have gained, a bar per skill in that skill's colour, and the progress
+to the next level. The colours are not duplicated in the card; it reads the
+ones the sensor already publishes, so the card and the panel cannot drift
+apart.
 
 ---
 
@@ -106,8 +114,9 @@ Activity**, open it, and press **Download**. This is the step people miss.
 sensible defaults; [see above](#two-windows-two-jobs) for what they do.
 
 That is the install. You have six entities under a device named after your
-player, and in the background the integration has fetched the skill icons and
-put the Pixoo blueprint into your blueprint folder.
+player, the **OSRS Activity** card is in your card picker, and in the
+background the integration has fetched the skill icons and put the Pixoo
+blueprint into your blueprint folder.
 
 If the dropdown in step 4 is empty, the RuneLite integration is not set up yet —
 see [Requirements](#requirements).
@@ -205,12 +214,15 @@ screen.
 
 ---
 
-## What it does not do yet
+## Known limits
+
+All three are limits of what the RuneLite plugin sends, not of what this does
+with it.
 
 **Idle only clears on your next XP drop.** The plugin sends an idle event but
 has no "active again" counterpart, so a gain is the only thing that can clear
-it. On a slow skill that can take a while. There is a PR open for this
-upstream; when it lands, the fix here is a second event listener.
+it. On a slow skill that can take a while. A PR for the missing event is open
+upstream; when it lands the change here is one more event listener.
 
 **Slayer kills are derived, not read.** Slayer XP arrives in a fixed amount per
 kill, so a run of equal chunks counts kills. The moment one differs — a
