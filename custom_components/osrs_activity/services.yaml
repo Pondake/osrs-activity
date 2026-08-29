@@ -1,0 +1,7 @@
+download_skill_icons:
+  fields:
+    overwrite:
+      required: false
+      default: false
+      selector:
+        boolean:

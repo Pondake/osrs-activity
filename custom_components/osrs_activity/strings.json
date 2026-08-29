@@ -1,0 +1,62 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Track a player",
+        "description": "Pick one of the accounts your RuneLite integration already knows about.",
+        "data": {
+          "username": "Player",
+          "window_minutes": "Session window (minutes)",
+          "focus_seconds": "Focus window (seconds)"
+        },
+        "data_description": {
+          "window_minutes": "How long a skill keeps its counter after the last gain. Come back later than this and the next gain starts a fresh session.",
+          "focus_seconds": "How quickly the display drops what you just stopped doing. Switch from combat to mining and the combat rows disappear after this."
+        }
+      }
+    },
+    "abort": {
+      "no_runelite": "No RuneLite players found. Set up the RuneLite integration first.",
+      "already_configured": "Every RuneLite player is already being tracked."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Windows",
+        "data": {
+          "window_minutes": "Session window (minutes)",
+          "focus_seconds": "Focus window (seconds)"
+        },
+        "data_description": {
+          "window_minutes": "How long a skill keeps its counter after the last gain.",
+          "focus_seconds": "How quickly the display drops what you just stopped doing."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "xp_session": { "name": "XP session" },
+      "focus_skill": { "name": "Focus skill" },
+      "session_xp": { "name": "Session XP" },
+      "xp_per_hour": { "name": "XP per hour" },
+      "combat_style": { "name": "Combat style" }
+    },
+    "binary_sensor": {
+      "idle": { "name": "Idle" }
+    }
+  },
+  "services": {
+    "download_skill_icons": {
+      "name": "Download skill icons",
+      "description": "Fetch the skill icons from the OSRS wiki into www/osrs_activity/icons/. Run once; only needed again when a new skill appears.",
+      "fields": {
+        "overwrite": {
+          "name": "Overwrite",
+          "description": "Fetch again even for icons that are already on disk."
+        }
+      }
+    }
+  }
+}
