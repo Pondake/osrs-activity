@@ -30,6 +30,10 @@ ALWAYS_FINE = [
     re.compile(r"\d+\+\w+@users\.noreply\.github\.com"),
     re.compile(r"https?://(?:www\.)?github\.com/"),
     re.compile(r"oldschool\.runescape\.wiki"),
+    # Retina asset naming. icon@2x.png has the shape of an address and is not
+    # one; without this the email rule fires on every high-dpi image in the
+    # repository.
+    re.compile(r"@\d+x\.(?:png|jpg|jpeg|gif|svg|webp)$", re.IGNORECASE),
 ]
 
 RULES: list[tuple[str, re.Pattern[str]]] = [

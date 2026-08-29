@@ -20,7 +20,7 @@ blueprint:
   domain: script
   homeassistant:
     min_version: "2024.6.0"
-  source_url: https://github.com/Pondake/osrs-activity/blob/main/blueprints/script/osrs_pixoo64.yaml
+  source_url: https://github.com/Pondake/osrs-activity/blob/main/custom_components/osrs_activity/blueprints/script/osrs_pixoo64.yaml
   input:
     panel:
       name: Pixoo page

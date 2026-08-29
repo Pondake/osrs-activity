@@ -30,6 +30,31 @@ USER_AGENT = (
 BLANK = "blank.png"
 
 
+async def async_ensure_icons(hass: HomeAssistant) -> dict | None:
+    """Fetch the icons on first setup, and never again after that.
+
+    Asking people to call a service before the thing works is asking them to
+    read the manual. The only reason this is not simply unconditional is the
+    wiki: re-fetching two dozen files on every restart would be rude to a
+    volunteer-run server for no gain.
+    """
+    target = Path(hass.config.path("www")) / ICON_DIR
+    if await hass.async_add_executor_job(_has_icons, target):
+        return None
+    _LOGGER.info("Fetching the OSRS skill icons, once")
+    return await async_download_icons(hass)
+
+
+def _has_icons(target: Path) -> bool:
+    """True once there is more than just the transparent stand-in."""
+    try:
+        return any(
+            path.name != BLANK for path in target.glob("*.png")
+        )
+    except OSError:
+        return False
+
+
 async def async_download_icons(
     hass: HomeAssistant, overwrite: bool = False
 ) -> dict:

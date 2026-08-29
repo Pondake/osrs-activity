@@ -1,3 +1,5 @@
+<img src="assets/icon-256.png" alt="" width="96" align="right">
+
 # OSRS Activity
 
 [![HACS: custom repository](https://img.shields.io/badge/HACS-custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories/)
@@ -84,50 +86,57 @@ anything.
 
 ## Install
 
-Two separate things get installed, and it is worth knowing that before you
-start. **The integration** publishes the sensors and asks only which player to
-follow. **The blueprint** draws them on a Pixoo and asks only which panel to
-draw on. They are installed in different places and neither knows about the
-other — so if you are here for the sensors and have no Pixoo, stop after
-step 4.
+Four steps, two of which are pressing a button. The skill icons fetch
+themselves on first setup and the Pixoo blueprint installs itself alongside the
+integration — neither is something you should have to go and do.
 
 **1. Add the repository to HACS.** Click the badge at the top, or by hand:
 HACS → the three dots, top right → *Custom repositories* → paste
 `https://github.com/Pondake/osrs-activity`, type **Integration** → *Add*.
 
-**2. Download it.** Adding a custom repository only tells HACS the repository
-exists; it does not install anything. Search HACS for **OSRS Activity**, open
-it, and press **Download**. This is the step people miss.
+**2. Download it.** Adding a custom repository only tells HACS that the
+repository exists; it does not install anything. Search HACS for **OSRS
+Activity**, open it, and press **Download**. This is the step people miss.
 
 **3. Restart Home Assistant.** New integrations are only picked up at startup.
 *Settings → System → top right → Restart*.
 
 **4. Add the integration.** *Settings → Devices & services → + Add integration*
-→ **OSRS Activity** → pick your player from the dropdown, and set the two
-windows (the defaults are fine).
+→ **OSRS Activity** → pick your player from the dropdown. The two windows have
+sensible defaults; [see above](#two-windows-two-jobs) for what they do.
 
-You now have six entities under a device named after your player. If the
-dropdown is empty, the RuneLite integration is not set up yet — see
-[Requirements](#requirements).
+That is the install. You have six entities under a device named after your
+player, and in the background the integration has fetched the skill icons and
+put the Pixoo blueprint into your blueprint folder.
 
-**5. Fetch the skill icons.** *Developer tools → Actions* →
-`osrs_activity.download_skill_icons` → *Perform action*. Once, and only again
-when a new skill comes out. Skip this and every icon is a blank square.
+If the dropdown in step 4 is empty, the RuneLite integration is not set up yet —
+see [Requirements](#requirements).
 
-**6. Only if you have a Pixoo 64:** import the blueprint. *Settings →
-Automations & scenes → Blueprints → Import blueprint*, and paste:
+### If you have a Pixoo 64
 
+*Settings → Automations & scenes → Blueprints* → **OSRS XP on a Pixoo 64** →
+*Create script*. It is already in the list; there is no URL to paste. Pick your
+panel and your XP session sensor, optionally your health and prayer sensors,
+and save.
+
+Then call that script whenever the panel should be redrawn — an automation on
+the XP session sensor changing is the obvious one:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: sensor.YOUR_PLAYER_xp_session
+actions:
+  - action: script.YOUR_SCRIPT
+mode: queued
+max: 2
 ```
-https://github.com/Pondake/osrs-activity/blob/main/blueprints/script/osrs_pixoo64.yaml
-```
 
-Then *Create script* from it. That is where you pick your Pixoo, your XP
-session sensor, and optionally your health and prayer sensors. Call the
-resulting script from an automation whenever you want the panel redrawn — a
-state trigger on the XP session sensor is the obvious one.
+`queued` rather than `single` on purpose: a rate limit may delay a render, but
+it must not forget one. See [docs/pixoo.md](docs/pixoo.md).
 
 <details>
-<summary>Why the badge cannot do all of this for you</summary>
+<summary>What the badge does and does not do</summary>
 
 The badge is a [My Home Assistant](https://my.home-assistant.io) link. It works
 for custom repositories as well as for ones in the default store — that is what
@@ -137,8 +146,8 @@ configuring are still steps 2 to 4.
 
 On HACS 2.0.5 that confirmation dialog can come up with no text and an
 unlabelled button, because HACS asks for it before its own translations have
-loaded. The unlabelled button is *Add*. This happens with any custom
-repository and is nothing to do with this one.
+finished loading. The unlabelled button is *Add*. This happens with any custom
+repository and has nothing to do with this one.
 </details>
 
 The player list in step 4 comes from the RuneLite integration rather than a text
@@ -147,22 +156,27 @@ result would look like an integration that just does not work.
 
 ## Skill icons
 
-Run this once:
+Fetched on first setup; you should not have to think about them. The 24 icons
+come from the OSRS wiki into `config/www/osrs_activity/icons/`, each normalised
+onto a 25×25 canvas, right-aligned. After that nothing that draws them ever
+touches the network — for a dashboard that is a nicety, but for an LED panel it
+is a requirement, because a render that waits on an HTTP request is a render
+that can hang.
+
+It only runs when that folder is empty, so a restart is not two dozen requests
+at a volunteer-run wiki. To fetch them again — a new skill, or a file you
+deleted:
 
 ```yaml
 action: osrs_activity.download_skill_icons
+data:
+  overwrite: true
 ```
-
-It pulls the 24 skill icons from the OSRS wiki into
-`config/www/osrs_activity/icons/`, each one normalised onto a 25×25 canvas,
-right-aligned. After that nothing that draws them ever touches the network —
-for a dashboard that is a nicety, but for an LED panel it is a requirement,
-because a render that waits on an HTTP request is a render that can hang.
 
 Straight from the wiki rather than hand-drawn, incidentally, because a
 hand-pixelled pickaxe at 24px reads as a hammer.
 
-Every row then carries both `icon_path` (a file, for anything using PIL) and
+Every row carries both `icon_path` (a file, for anything using PIL) and
 `icon_url` (a `/local/` URL, for the frontend). A skill with no icon resolves to
 a transparent square rather than to a path that does not exist — the second one
 is not a missing picture, it is a dead page.
@@ -171,11 +185,12 @@ is not a missing picture, it is a dead page.
 
 ## The Pixoo 64 screens
 
-`blueprints/script/osrs_pixoo64.yaml` is a script blueprint that draws the
+`custom_components/osrs_activity/blueprints/script/osrs_pixoo64.yaml` is a
+script blueprint that draws the
 whole thing on a [Divoom Pixoo 64](https://github.com/Faisalthe01/divoom_pixoo).
-Import it, pick your panel and your XP session sensor, and you are done — no
-YAML to copy and no entity IDs to find and replace. See step 6 of
-[Install](#install) for where to paste the URL.
+It installs itself with the integration, so it is already in your blueprint
+list — pick your panel and your XP session sensor and you are done. No YAML to
+copy, no URL to paste, no entity IDs to find and replace.
 
 Three screens, chosen automatically:
 

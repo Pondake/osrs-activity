@@ -10,6 +10,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import config_validation as cv
 
+from .blueprints import async_install_blueprints
 from .const import (
     CONF_FOCUS_SECONDS,
     CONF_USERNAME,
@@ -19,7 +20,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import ActivityCoordinator
-from .icons import async_download_icons
+from .icons import async_download_icons, async_ensure_icons
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +52,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_reload))
 
     _register_services(hass)
+    # Both of these make the integration work out of the box rather than after
+    # reading the readme, and neither is allowed to hold setup up or fail it:
+    # no network, no write permission, still a working integration.
+    entry.async_create_background_task(
+        hass, _async_first_run(hass, coordinator), f"{DOMAIN}_first_run"
+    )
     return True
+
+
+async def _async_first_run(
+    hass: HomeAssistant, coordinator: ActivityCoordinator
+) -> None:
+    """Fetch the skill icons and install the blueprint, once, in the background."""
+    try:
+        await async_install_blueprints(hass)
+    except Exception:  # a missing blueprint must not be a failed setup
+        _LOGGER.exception("Could not install the bundled blueprint")
+
+    try:
+        if await async_ensure_icons(hass):
+            await coordinator.async_refresh_icons()
+    except Exception:  # the service can always be run by hand
+        _LOGGER.exception(
+            "Could not fetch the skill icons; run %s.%s to retry",
+            DOMAIN,
+            SERVICE_DOWNLOAD_ICONS,
+        )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

@@ -61,6 +61,8 @@ CLEAN = [
     "Run once; the icons land in config/www/osrs_activity/icons/.",
     'ICON_DIR = "osrs_activity/icons"',
     "for skill in SKILLS:",
+    # Shaped like an address, is not one.
+    'OUTPUTS = {"icon@2x.png": 512, "logo@2x.png": 512}',
 ]
 
 
