@@ -1,0 +1,479 @@
+blueprint:
+  name: OSRS XP on a Pixoo 64
+  description: >-
+    Draws what you are training on a Divoom Pixoo 64.
+
+
+    Three screens, picked automatically from what the XP session sensor reports:
+    a combat screen when everything gaining XP is a combat skill, a single-skill
+    screen when you are focused on one thing, and a bar chart for anything else.
+
+
+    When nothing is gaining XP this script does nothing at all and leaves the
+    panel alone -- so it can sit inside your own priority ladder without
+    fighting it for the screen.
+
+
+    Needs the `osrs_activity` and `divoom_pixoo` integrations. Run
+    `osrs_activity.download_skill_icons` once first, or the skill icon is a
+    transparent square.
+  domain: script
+  homeassistant:
+    min_version: "2024.6.0"
+  source_url: https://github.com/Pondake/osrs-activity/blob/main/blueprints/script/osrs_pixoo64.yaml
+  input:
+    panel:
+      name: Pixoo page
+      description: The current-page sensor of your Pixoo, which is what divoom_pixoo draws to.
+      selector:
+        entity:
+          integration: divoom_pixoo
+          domain: sensor
+    activity:
+      name: XP session sensor
+      description: The "XP session" sensor from OSRS Activity, for the player you want on the panel.
+      selector:
+        entity:
+          integration: osrs_activity
+          domain: sensor
+    vitals:
+      name: Health and prayer
+      icon: mdi:heart
+      collapsed: true
+      description: >-
+        Optional. Fills the 2px strip along the top and the two bars on the
+        combat screen. Leave empty and those are simply not drawn.
+      input:
+        health:
+          name: Current hitpoints
+          default: ""
+          selector:
+            entity:
+              integration: runelite
+              domain: sensor
+        hitpoints_skill:
+          name: Hitpoints skill
+          description: Used for your maximum, which is the level rather than the XP.
+          default: ""
+          selector:
+            entity:
+              integration: runelite
+              domain: sensor
+        prayer:
+          name: Current prayer points
+          default: ""
+          selector:
+            entity:
+              integration: runelite
+              domain: sensor
+        prayer_skill:
+          name: Prayer skill
+          default: ""
+          selector:
+            entity:
+              integration: runelite
+              domain: sensor
+    styling:
+      name: Styling
+      icon: mdi:palette
+      collapsed: true
+      input:
+        background:
+          name: Background
+          default: [42, 34, 24]
+          selector:
+            color_rgb:
+        accent:
+          name: Accent
+          description: Headings and the single-skill bar fall back to this.
+          default: [255, 152, 31]
+          selector:
+            color_rgb:
+        min_interval:
+          name: Minimum time between pushes
+          description: >-
+            The script ends on a wait of this long, so two calls can never land
+            on the device inside it. One second is the figure the vendor gives,
+            and it sits twelve times under where a Pixoo 64 was measured to
+            freeze. Lower is possible, but it is the only margin there is.
+          default: 1
+          selector:
+            number:
+              min: 0.2
+              max: 5
+              step: 0.1
+              unit_of_measurement: s
+              mode: box
+
+mode: queued
+max: 2
+max_exceeded: silent
+icon: mdi:sword-cross
+
+variables:
+  activity: !input activity
+  health: !input health
+  hitpoints_skill: !input hitpoints_skill
+  prayer: !input prayer
+  prayer_skill: !input prayer_skill
+  bg: !input background
+  accent: !input accent
+  floor: !input min_interval
+
+  rows: "{{ state_attr(activity, 'skills') or [] }}"
+  top: "{{ state_attr(activity, 'top') or {} }}"
+  active: "{{ states(activity) | int(0) }}"
+  focus_n: "{{ state_attr(activity, 'focus_n') | int(0) }}"
+  combat: "{{ state_attr(activity, 'combat') | default(false, true) }}"
+  idle: "{{ state_attr(activity, 'idle') | default(false, true) }}"
+  gained: "{{ state_attr(activity, 'total_gained_short') | default('0', true) }}"
+  per_hour: "{{ state_attr(activity, 'per_hour') | int(0) }}"
+
+  # -1 means "not configured", which draws in the background colour and so
+  # draws nothing. Kept out of the components themselves because the same
+  # number is needed three times per screen.
+  hp_pct: >-
+    {% if health and hitpoints_skill %}
+      {{ [ (states(health) | float(0) /
+            (state_attr(hitpoints_skill, 'level') | float(99))) * 100,
+           100 ] | min | round | int }}
+    {% else %}-1{% endif %}
+  pray_pct: >-
+    {% if prayer and prayer_skill %}
+      {{ [ (states(prayer) | float(0) /
+            (state_attr(prayer_skill, 'level') | float(99))) * 100,
+           100 ] | min | round | int }}
+    {% else %}-1{% endif %}
+  hp_color: >-
+    {% set p = hp_pct | int(-1) %}
+    {% if p < 0 %}{{ bg }}{% elif p > 50 %}[0,220,60]
+    {% elif p > 25 %}[255,180,0]{% else %}[255,40,40]{% endif %}
+
+sequence:
+  - condition: template
+    value_template: "{{ active >= 1 }}"
+
+  - choose:
+      # ---------------------------------------------------------------- combat
+      # Everything gaining XP is a combat skill. The heading is the attack
+      # style, which is read off from which of attack/strength/defence are
+      # ticking -- or the slayer heading, because you know what weapon you are
+      # holding and you cannot see how far along the task is.
+      - conditions: "{{ combat }}"
+        sequence:
+          - action: divoom_pixoo.show_message
+            target:
+              entity_id: !input panel
+            data:
+              page_data:
+                page_type: components
+                components:
+                  - type: rectangle
+                    position: [0, 0]
+                    size: [64, 64]
+                    color: "{{ bg }}"
+                    filled: true
+                  - type: rectangle
+                    position: [0, 0]
+                    size: ["{{ [ [ ((hp_pct | int(0)) * 0.64) | round | int, 1 ] | max, 64 ] | min }}", 2]
+                    color: "{{ hp_color }}"
+                    filled: true
+                  - type: text
+                    content: "{{ state_attr(activity, 'style') }}"
+                    position: [2, 5]
+                    font: PICO_8
+                    color: "{{ accent }}"
+                  - type: text
+                    content: "{% set k = state_attr(activity, 'slayer_kills') | int(0) %}{% if k > 0 %}x{{ k }}{% endif %}"
+                    position: [62, 5]
+                    font: PICO_8
+                    color: [150, 150, 160]
+                    align: right
+                  - type: rectangle
+                    position: [0, 13]
+                    size: [64, 1]
+                    color: [90, 74, 54]
+                    filled: true
+                  - type: image
+                    image_path: "{{ state_attr(activity, 'style_icon') }}"
+                    position: [38, 16]
+                    resample_mode: nearest
+                  - type: text
+                    content: "+{{ gained }} XP"
+                    position: [2, 19]
+                    font: PICO_8
+                    color: [255, 220, 0]
+                  - type: rectangle
+                    position: [0, 27]
+                    size: [36, 10]
+                    color: "{% if idle %}[255,180,0]{% else %}{{ bg }}{% endif %}"
+                    filled: true
+                  - type: text
+                    content: "{% if idle %}IDLE{% else %}{{ (per_hour / 1000) | round(1) }}k/HR{% endif %}"
+                    position: [2, 30]
+                    font: PICO_8
+                    color: "{% if idle %}[60,45,10]{% else %}[200,170,120]{% endif %}"
+                  - type: text
+                    content: HP
+                    position: [2, 45]
+                    font: PICO_8
+                    color: [200, 170, 120]
+                  - type: rectangle
+                    position: [22, 44]
+                    size: [40, 7]
+                    color: [72, 60, 44]
+                    filled: true
+                  - type: rectangle
+                    position: [22, 44]
+                    size: ["{{ [ [ ((hp_pct | int(0)) * 0.4) | round | int, 1 ] | max, 40 ] | min }}", 7]
+                    color: "{{ hp_color }}"
+                    filled: true
+                  - type: text
+                    content: PRAY
+                    position: [2, 55]
+                    font: PICO_8
+                    color: [200, 170, 120]
+                  - type: rectangle
+                    position: [22, 54]
+                    size: [40, 7]
+                    color: [72, 60, 44]
+                    filled: true
+                  - type: rectangle
+                    position: [22, 54]
+                    size: ["{{ [ [ ((pray_pct | int(0)) * 0.4) | round | int, 1 ] | max, 40 ] | min }}", 7]
+                    color: "{% if (pray_pct | int(-1)) < 0 %}{{ bg }}{% else %}[140,200,255]{% endif %}"
+                    filled: true
+
+      # ---------------------------------------------------------- single skill
+      # One thing at a time: the name, what you have gained, the rate, and how
+      # far the bar has to go to the next level.
+      - conditions: "{{ focus_n == 1 }}"
+        sequence:
+          - action: divoom_pixoo.show_message
+            target:
+              entity_id: !input panel
+            data:
+              page_data:
+                page_type: components
+                components:
+                  - type: rectangle
+                    position: [0, 0]
+                    size: [64, 64]
+                    color: "{{ bg }}"
+                    filled: true
+                  - type: rectangle
+                    position: [0, 0]
+                    size: ["{{ [ [ ((hp_pct | int(0)) * 0.64) | round | int, 1 ] | max, 64 ] | min }}", 2]
+                    color: "{{ hp_color }}"
+                    filled: true
+                  - type: text
+                    content: "{{ (top.key | default('')) | upper }}"
+                    position: [2, 5]
+                    font: PICO_8
+                    color: "{% if idle %}[120,105,80]{% else %}{{ top.color | default(accent, true) }}{% endif %}"
+                  - type: text
+                    content: "{{ top.level | default('') }}"
+                    position: [62, 5]
+                    font: PICO_8
+                    color: [200, 170, 120]
+                    align: right
+                  - type: rectangle
+                    position: [0, 13]
+                    size: [64, 1]
+                    color: [90, 74, 54]
+                    filled: true
+                  - type: image
+                    image_path: "{{ top.icon_path }}"
+                    position: [38, 16]
+                    resample_mode: nearest
+                  - type: text
+                    content: "+{{ top.gained_short | default('0') }} XP"
+                    position: [2, 18]
+                    font: PICO_8
+                    color: [255, 220, 0]
+                  - type: rectangle
+                    position: [0, 27]
+                    size: [36, 10]
+                    color: "{% if idle %}[255,180,0]{% else %}{{ bg }}{% endif %}"
+                    filled: true
+                  - type: text
+                    content: "{% if idle %}IDLE{% else %}{{ top.per_hour_short | default('0') }}/HR{% endif %}"
+                    position: [2, 29]
+                    font: PICO_8
+                    color: "{% if idle %}[60,45,10]{% else %}[200,170,120]{% endif %}"
+                  - type: rectangle
+                    position: [2, 47]
+                    size: [60, 6]
+                    color: [72, 60, 44]
+                    filled: true
+                  - type: rectangle
+                    position: [2, 47]
+                    size: ["{{ [ ((top.pct | default(0) | float(0)) * 0.6) | round | int, 1 ] | max }}", 6]
+                    color: "{{ top.color | default(accent, true) }}"
+                    filled: true
+                  - type: text
+                    content: "{{ top.xp_short | default('') }}"
+                    position: [2, 56]
+                    font: PICO_8
+                    color: [200, 170, 120]
+                  - type: text
+                    content: "{% if top.next_level | default(none) %}L{{ top.next_level }}{% endif %}"
+                    position: [62, 56]
+                    font: PICO_8
+                    color: [140, 120, 90]
+                    align: right
+
+    # ------------------------------------------------------------------- bars
+    # Anything else: up to five skills, each with a bar scaled against the
+    # biggest gainer. Five rows is what fits at 9px a row, and the heading says
+    # "+2" when there are more.
+    default:
+      - action: divoom_pixoo.show_message
+        target:
+          entity_id: !input panel
+        data:
+          page_data:
+            page_type: components
+            components:
+              - type: rectangle
+                position: [0, 0]
+                size: [64, 64]
+                color: "{{ bg }}"
+                filled: true
+              - type: rectangle
+                position: [0, 0]
+                size: ["{{ [ [ ((hp_pct | int(0)) * 0.64) | round | int, 1 ] | max, 64 ] | min }}", 2]
+                color: "{{ hp_color }}"
+                filled: true
+              - type: text
+                content: "{% if idle %}IDLE{% else %}XP{% if active > 5 %} +{{ active - 5 }}{% endif %}{% endif %}"
+                position: [2, 5]
+                font: PICO_8
+                color: "{% if idle %}[255,180,0]{% else %}{{ accent }}{% endif %}"
+              - type: text
+                content: "+{{ gained }}"
+                position: [62, 5]
+                font: PICO_8
+                color: [200, 170, 120]
+                align: right
+              - type: rectangle
+                position: [0, 13]
+                size: [64, 1]
+                color: [90, 74, 54]
+                filled: true
+
+              - type: text
+                content: "{{ rows[0].label if rows | count > 0 else '' }}"
+                position: [2, 17]
+                font: PICO_8
+                color: "{{ accent }}"
+              - type: rectangle
+                position: [20, 16]
+                size: [20, 7]
+                color: "{% if rows | count > 0 %}[72,60,44]{% else %}{{ bg }}{% endif %}"
+                filled: true
+              - type: rectangle
+                position: [20, 16]
+                size: ["{{ [ ((rows[0].share | float(0)) * 0.2) | round | int, 1 ] | max if rows | count > 0 else 1 }}", 7]
+                color: "{{ rows[0].color if rows | count > 0 else bg }}"
+                filled: true
+              - type: text
+                content: "{{ rows[0].gained_short if rows | count > 0 else '' }}"
+                position: [62, 17]
+                font: PICO_8
+                color: [200, 170, 120]
+                align: right
+
+              - type: text
+                content: "{{ rows[1].label if rows | count > 1 else '' }}"
+                position: [2, 26]
+                font: PICO_8
+                color: [200, 170, 120]
+              - type: rectangle
+                position: [20, 25]
+                size: [20, 7]
+                color: "{% if rows | count > 1 %}[72,60,44]{% else %}{{ bg }}{% endif %}"
+                filled: true
+              - type: rectangle
+                position: [20, 25]
+                size: ["{{ [ ((rows[1].share | float(0)) * 0.2) | round | int, 1 ] | max if rows | count > 1 else 1 }}", 7]
+                color: "{{ rows[1].color if rows | count > 1 else bg }}"
+                filled: true
+              - type: text
+                content: "{{ rows[1].gained_short if rows | count > 1 else '' }}"
+                position: [62, 26]
+                font: PICO_8
+                color: [140, 120, 90]
+                align: right
+
+              - type: text
+                content: "{{ rows[2].label if rows | count > 2 else '' }}"
+                position: [2, 35]
+                font: PICO_8
+                color: [200, 170, 120]
+              - type: rectangle
+                position: [20, 34]
+                size: [20, 7]
+                color: "{% if rows | count > 2 %}[72,60,44]{% else %}{{ bg }}{% endif %}"
+                filled: true
+              - type: rectangle
+                position: [20, 34]
+                size: ["{{ [ ((rows[2].share | float(0)) * 0.2) | round | int, 1 ] | max if rows | count > 2 else 1 }}", 7]
+                color: "{{ rows[2].color if rows | count > 2 else bg }}"
+                filled: true
+              - type: text
+                content: "{{ rows[2].gained_short if rows | count > 2 else '' }}"
+                position: [62, 35]
+                font: PICO_8
+                color: [140, 120, 90]
+                align: right
+
+              - type: text
+                content: "{{ rows[3].label if rows | count > 3 else '' }}"
+                position: [2, 44]
+                font: PICO_8
+                color: [200, 170, 120]
+              - type: rectangle
+                position: [20, 43]
+                size: [20, 7]
+                color: "{% if rows | count > 3 %}[72,60,44]{% else %}{{ bg }}{% endif %}"
+                filled: true
+              - type: rectangle
+                position: [20, 43]
+                size: ["{{ [ ((rows[3].share | float(0)) * 0.2) | round | int, 1 ] | max if rows | count > 3 else 1 }}", 7]
+                color: "{{ rows[3].color if rows | count > 3 else bg }}"
+                filled: true
+              - type: text
+                content: "{{ rows[3].gained_short if rows | count > 3 else '' }}"
+                position: [62, 44]
+                font: PICO_8
+                color: [140, 120, 90]
+                align: right
+
+              - type: text
+                content: "{{ rows[4].label if rows | count > 4 else '' }}"
+                position: [2, 53]
+                font: PICO_8
+                color: [200, 170, 120]
+              - type: rectangle
+                position: [20, 52]
+                size: [20, 7]
+                color: "{% if rows | count > 4 %}[72,60,44]{% else %}{{ bg }}{% endif %}"
+                filled: true
+              - type: rectangle
+                position: [20, 52]
+                size: ["{{ [ ((rows[4].share | float(0)) * 0.2) | round | int, 1 ] | max if rows | count > 4 else 1 }}", 7]
+                color: "{{ rows[4].color if rows | count > 4 else bg }}"
+                filled: true
+              - type: text
+                content: "{{ rows[4].gained_short if rows | count > 4 else '' }}"
+                position: [62, 53]
+                font: PICO_8
+                color: [140, 120, 90]
+                align: right
+
+  # The floor, and the reason this script runs queued rather than single: a
+  # rate limit may delay a render, it may not forget one. Dropping the trigger
+  # is how IDLE ends up arriving a minute late.
+  - delay:
+      seconds: "{{ floor }}"

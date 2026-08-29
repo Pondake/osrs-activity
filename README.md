@@ -1,0 +1,184 @@
+# OSRS Activity
+
+A Home Assistant integration that answers one question: **what is this Old
+School RuneScape player doing right now?**
+
+The [RuneLite integration](https://github.com/db1996/homeassistant_runelite)
+already gives you a sensor per skill, but those report a *total* — how much XP
+you have, not how much you just earned. Everything you would actually want to
+show is a delta, and a delta needs memory. This keeps that memory: which skills
+have a live counter, how fast each is climbing, which one you are focused on,
+and — when it is all combat — which attack style you are using, read off from
+which of attack, strength and defence are ticking.
+
+Nothing here knows about any particular display. It publishes sensors; what you
+do with them is up to you. There is [a blueprint for a Pixoo 64](#the-pixoo-64-screens)
+in this repo because that is what it was built for, but a dashboard card is
+just as valid a consumer.
+
+---
+
+## What you get
+
+One device per player, with six entities.
+
+| Entity | State | Good for |
+|---|---|---|
+| `sensor.<player>_xp_session` | how many skills have a live counter | everything — the full picture is in its attributes |
+| `sensor.<player>_focus_skill` | `mining`, `slayer`, … | "what am I training" |
+| `sensor.<player>_session_xp` | XP gained this sitting | a graph of your evening |
+| `sensor.<player>_xp_per_hour` | rate, from the start of the sitting | is this method actually faster |
+| `sensor.<player>_combat_style` | `AGGRESSIVE`, `RANGED`, `Slayin'`, … | switching a light when you switch styles |
+| `binary_sensor.<player>_idle` | on when you are standing around | a nudge when you have been afk for a while |
+
+The XP session sensor is the one to template against. Its attributes carry
+`skills` (what is happening now), `window_skills` (everything with a counter
+still running), `top`, `combat`, `style`, `slayer_kills`, `total_gained_short`
+and the idle state — and every skill row comes with a label that fits in four
+characters, a colour, a percentage through the current level, and a path to its
+icon.
+
+```jinja
+{{ state_attr('sensor.pondake_xp_session', 'top').gained_short }}   → "12.3k"
+{{ state_attr('sensor.pondake_xp_session', 'style') }}              → "AGGRESSIVE"
+{{ state_attr('sensor.pondake_xp_session', 'skills')
+   | map(attribute='label') | join(' ') }}                          → "STR ATT HP"
+```
+
+---
+
+## Two windows, two jobs
+
+They were one number at first and it felt sluggish, so they are separate.
+
+**Session window** (minutes, default 5) is how long a skill keeps its counter
+after the last gain. Pick the pickaxe back up inside it and `gained` carries on
+where it was; come back later and the next gain starts a fresh sitting. It
+doubles as the reset threshold on purpose — that way "gained" always means
+exactly one thing, the XP of *this* sitting.
+
+**Focus window** (seconds, default 25) is a different question: what is
+happening *now*. Step off combat onto mining and the combat rows drop out after
+this, not after the whole session window. If the focus falls empty during a
+short pause, everything inside the session window comes back — an empty screen
+is worse than a slightly stale one.
+
+Both are on the integration's options, so you can change them without editing
+anything.
+
+---
+
+## Requirements
+
+- [`db1996/homeassistant_runelite`](https://github.com/db1996/homeassistant_runelite),
+  set up with at least one player. **HACS will not install this for you** — add
+  it first, or the config flow here has nothing to offer you.
+- The matching RuneLite plugin, with **Skill XP** enabled so XP arrives live
+  instead of once per hiscores poll. Idle detection is optional; its threshold
+  lives in the plugin's own panel, and this integration deliberately keeps no
+  second threshold of its own.
+
+## Install
+
+HACS → three dots → **Custom repositories** → `https://github.com/Pondake/osrs-activity`,
+category **Integration**. Then add **OSRS Activity** from *Settings → Devices &
+services*, and pick your player from the dropdown.
+
+The player list comes from the RuneLite integration rather than a text box on
+purpose: a typo would silently match no skill sensors at all, and the result
+would look like an integration that just does not work.
+
+## Skill icons
+
+Run this once:
+
+```yaml
+action: osrs_activity.download_skill_icons
+```
+
+It pulls the 24 skill icons from the OSRS wiki into
+`config/www/osrs_activity/icons/`, each one normalised onto a 25×25 canvas,
+right-aligned. After that nothing that draws them ever touches the network —
+for a dashboard that is a nicety, but for an LED panel it is a requirement,
+because a render that waits on an HTTP request is a render that can hang.
+
+Straight from the wiki rather than hand-drawn, incidentally, because a
+hand-pixelled pickaxe at 24px reads as a hammer.
+
+Every row then carries both `icon_path` (a file, for anything using PIL) and
+`icon_url` (a `/local/` URL, for the frontend). A skill with no icon resolves to
+a transparent square rather than to a path that does not exist — the second one
+is not a missing picture, it is a dead page.
+
+---
+
+## The Pixoo 64 screens
+
+`blueprints/script/osrs_pixoo64.yaml` is a script blueprint that draws the
+whole thing on a [Divoom Pixoo 64](https://github.com/Faisalthe01/divoom_pixoo).
+Import it by URL, pick your panel and your XP session sensor, and you are done —
+no YAML to copy and no entity IDs to find and replace.
+
+Three screens, chosen automatically:
+
+| When | Screen |
+|---|---|
+| everything gaining XP is a combat skill | attack style, total gained, rate, HP and prayer bars |
+| one skill in focus | that skill, gained, rate, and the bar to the next level |
+| anything else | up to five skills, bars scaled against the biggest gainer |
+
+The bars scale against the biggest gainer *inside the focus* rather than
+against an absolute figure. That makes a combat sitting read as a ratio
+(2:1:1 strength/attack/hitpoints) and makes the same scale work for Wintertodt
+and for Zulrah without a special case for either.
+
+Health and prayer are optional inputs; leave them empty and those bars are
+simply not drawn. Background and accent are colour pickers.
+
+When nothing is gaining XP the script does nothing at all and leaves the panel
+alone, so it can sit inside your own priority ladder without fighting it for the
+screen.
+
+> **Before you raise the refresh rate:** [docs/pixoo.md](docs/pixoo.md) has the
+> measured limits of the device. Short version — it does not crash under load,
+> it *freezes*, and it does so silently: it keeps answering HTTP with
+> `error_code: 0` while nothing on screen changes any more. Home Assistant
+> cannot see that happen.
+
+---
+
+## What it does not do yet
+
+**Idle only clears on your next XP drop.** The plugin sends an idle event but
+has no "active again" counterpart, so a gain is the only thing that can clear
+it. On a slow skill that can take a while. There is a PR open for this
+upstream; when it lands, the fix here is a second event listener.
+
+**Slayer kills are derived, not read.** Slayer XP arrives in a fixed amount per
+kill, so a run of equal chunks counts kills. The moment one differs — a
+barrage, a mixed task, a kill that lands together with something else — the
+division stops meaning anything and the count is hidden rather than shown
+wrong. A task name and a real counter need the plugin to send them, which is
+also a PR away. Worth keeping the derivation as a fallback either way: it works
+on tasks the plugin knows nothing about.
+
+**The idle event has no payload,** so with two accounts logged in there is no
+telling which one went idle. Fine as long as only one plays at a time; fixable
+only on the plugin side.
+
+---
+
+## Credit
+
+Built on [**db1996/homeassistant_runelite**](https://github.com/db1996/homeassistant_runelite)
+and its RuneLite plugin, which do all the actual talking to the game. This
+integration only remembers what they already told you.
+
+Pixoo drawing goes through
+[**Faisalthe01/divoom_pixoo**](https://github.com/Faisalthe01/divoom_pixoo).
+
+Icons are from the [OSRS Wiki](https://oldschool.runescape.wiki), used under
+their licence. Old School RuneScape is a trademark of Jagex Ltd; this is an
+unofficial hobby project and is not affiliated with or endorsed by Jagex.
+
+MIT licensed.
