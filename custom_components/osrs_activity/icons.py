@@ -1,13 +1,11 @@
 """Cache the OSRS skill icons locally.
 
-Run once; after that the icons are on disk and nothing that draws them ever
-touches the network. For a dashboard that is a nicety, but for an LED panel it
-is a requirement: the Divoom integration opens the file with PIL, and a render
-that has to wait on an HTTP request is a render that can hang.
+Fetched once, then read from disk. That matters for the Pixoo in particular:
+the Divoom integration opens the file with PIL during a render, so anything
+that waits on HTTP there can hang the render.
 
-Straight from the wiki rather than hand-drawn. A hand-pixelled pickaxe at 24px
-reads as a hammer; the real skill icons were made for exactly this size and are
-recognisable instantly.
+Taken from the wiki instead of drawn by hand, after a hand-pixelled pickaxe at
+24px turned out to read as a hammer.
 """
 
 from __future__ import annotations
@@ -33,10 +31,9 @@ BLANK = "blank.png"
 async def async_ensure_icons(hass: HomeAssistant) -> dict | None:
     """Fetch the icons on first setup, and never again after that.
 
-    Asking people to call a service before the thing works is asking them to
-    read the manual. The only reason this is not simply unconditional is the
-    wiki: re-fetching two dozen files on every restart would be rude to a
-    volunteer-run server for no gain.
+    Runs on setup so the icons are there without anyone calling a service.
+    Only when the folder is empty, because re-fetching two dozen files on every
+    restart would hammer a volunteer-run wiki for nothing.
     """
     target = Path(hass.config.path("www")) / ICON_DIR
     if await hass.async_add_executor_job(_has_icons, target):
@@ -123,10 +120,9 @@ async def _async_find_file(session, skill: str) -> str | None:
 def _prepare(target: Path) -> None:
     """Make the directory and the transparent fallback.
 
-    The fallback has to exist. A skill without an icon then draws nothing,
-    where a path that does not exist is not a missing picture but a dead page:
-    PIL raises, and the Divoom integration only catches template and network
-    errors.
+    The fallback has to exist so a skill without an icon still resolves to a
+    real file. PIL raises on a missing path and the Divoom integration only
+    catches template and network errors, so that would take down the page.
     """
     from PIL import Image
 

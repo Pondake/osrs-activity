@@ -99,8 +99,8 @@ class Session:
     ticks: int = 0
     # Slayer XP arrives in a fixed amount per kill, so a run of equal chunks
     # counts kills. The moment one differs (a barrage, a mixed task, a kill that
-    # lands together with something else) the division stops meaning anything
-    # and we show nothing -- a wrong number is worse than no number.
+    # lands together with something else) the division no longer holds, and the
+    # count is hidden rather than reported wrong.
     chunk: int | None = None
     uniform: bool = True
 

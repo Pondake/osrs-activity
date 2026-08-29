@@ -146,9 +146,10 @@ class ActivityCoordinator:
     def _scan_icons(self) -> None:
         """Which skill icons are on disk, resolved once rather than per render.
 
-        A path that does not exist is not a missing picture -- the Pixoo
-        integration opens it and the whole page dies -- so a skill without an
-        icon has to resolve to something else, not to a hopeful guess.
+        The Pixoo integration opens these with PIL and only catches template
+        and network errors, so a path that does not exist takes down the whole
+        page. Resolving here means a skill without an icon falls back to the
+        transparent stand-in instead.
         """
         try:
             self._icons = {
@@ -196,9 +197,8 @@ class ActivityCoordinator:
         """The plugin says the player has stopped doing anything.
 
         How long you have to stand still first is the Idle delay in the
-        RuneLite plugin's own panel. Keeping a second threshold here would only
-        produce a Home Assistant side and a plugin side that disagree; if it
-        fires too eagerly, that setting is the place to fix it.
+        RuneLite plugin's own panel. There is no threshold here, so if it fires
+        too eagerly that setting is where to change it.
         """
         self.engine.mark_idle(datetime.now())
         self._publish()

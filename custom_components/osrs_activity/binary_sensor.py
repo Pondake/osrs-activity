@@ -26,8 +26,8 @@ class IdleBinarySensor(OsrsActivityEntity, BinarySensorEntity):
 
     Turned on by the plugin's idle event and turned off by the next XP gain.
     How long you have to stand still first is the Idle delay in the RuneLite
-    plugin's own panel -- this integration deliberately keeps no threshold of
-    its own, because two thresholds is two answers to the same question.
+    plugin's own panel; this integration keeps no threshold of its own, so
+    there is only one place to change it.
 
     That also means the "not idle any more" edge is only as fast as your next
     XP drop, which on a slow skill can be a while.

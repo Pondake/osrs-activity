@@ -6,21 +6,17 @@
 [![Validate](https://github.com/Pondake/osrs-activity/actions/workflows/validate.yml/badge.svg)](https://github.com/Pondake/osrs-activity/actions/workflows/validate.yml)
 [![Open your Home Assistant instance and open this repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Pondake&repository=osrs-activity&category=integration)
 
-A Home Assistant integration that answers one question: **what is this Old
-School RuneScape player doing right now?**
+Tracks what an Old School RuneScape player is training and publishes it as
+Home Assistant sensors: XP gained this session, XP per hour, which skills are
+active, and which attack style you are using in combat.
 
 The [RuneLite integration](https://github.com/db1996/homeassistant_runelite)
-already gives you a sensor per skill, but those report a *total* — how much XP
-you have, not how much you just earned. Everything you would actually want to
-show is a delta, and a delta needs memory. This keeps that memory: which skills
-have a live counter, how fast each is climbing, which one you are focused on,
-and — when it is all combat — which attack style you are using, read off from
-which of attack, strength and defence are ticking.
+gives you a sensor per skill, but those hold a running total. Working out what
+you just earned means remembering where the totals were a minute ago, and that
+is the part this adds.
 
-Two ways to look at it ship with it: a **dashboard card**, and a **blueprint
-for a Divoom Pixoo 64**. Neither is a separate install and neither is required
-— the sensors stand on their own, and the engine that fills them has no idea
-either exists.
+A dashboard card and a blueprint for a Divoom Pixoo 64 come with it. Both are
+optional, and neither needs its own install.
 
 ---
 
@@ -55,9 +51,8 @@ You do not have to touch any of that, though. **A dashboard card comes with the
 integration** — it appears in the card picker as *OSRS Activity*, takes one
 entity, and shows the same thing the panel does: the skill or the attack style,
 what you have gained, a bar per skill in that skill's colour, and the progress
-to the next level. The colours are not duplicated in the card; it reads the
-ones the sensor already publishes, so the card and the panel cannot drift
-apart.
+to the next level. It uses the colours the sensor publishes, so the card and
+the Pixoo always show a skill in the same colour.
 
 ---
 
@@ -68,14 +63,14 @@ They were one number at first and it felt sluggish, so they are separate.
 **Session window** (minutes, default 5) is how long a skill keeps its counter
 after the last gain. Pick the pickaxe back up inside it and `gained` carries on
 where it was; come back later and the next gain starts a fresh sitting. It
-doubles as the reset threshold on purpose — that way "gained" always means
-exactly one thing, the XP of *this* sitting.
+is also the reset threshold, so "gained" always means the XP of the current
+sitting and nothing else.
 
 **Focus window** (seconds, default 25) is a different question: what is
 happening *now*. Step off combat onto mining and the combat rows drop out after
 this, not after the whole session window. If the focus falls empty during a
-short pause, everything inside the session window comes back — an empty screen
-is worse than a slightly stale one.
+short pause, everything inside the session window comes back, so a gap between
+actions does not empty the display.
 
 Both are on the integration's options, so you can change them without editing
 anything.
@@ -94,9 +89,8 @@ anything.
 
 ## Install
 
-Four steps, two of which are pressing a button. The skill icons fetch
-themselves on first setup and the Pixoo blueprint installs itself alongside the
-integration — neither is something you should have to go and do.
+Four steps. The skill icons and the Pixoo blueprint are handled on first
+setup; there is nothing to run afterwards.
 
 **1. Add the repository to HACS.** Click the badge at the top, or by hand:
 HACS → the three dots, top right → *Custom repositories* → paste
@@ -131,14 +125,13 @@ so a restart is not two dozen requests at a volunteer-run wiki. To fetch them
 again — a new skill, or a file you deleted — call
 `osrs_activity.download_skill_icons` with `overwrite: true`.
 
-Copied the Pixoo blueprint into `config/blueprints/script/osrs_activity/`.
-Never overwriting one that is already there: if you have edited it, it is
-yours.
+Copied the Pixoo blueprint into `config/blueprints/script/osrs_activity/`. An
+existing file is never overwritten, so edits you make survive an update.
 
 Every skill row then carries `icon_path` (a file, for anything using PIL) and
 `icon_url` (a `/local/` URL, for the frontend). A skill with no icon resolves
-to a transparent square rather than to a path that does not exist — the second
-one is not a missing picture, it is a dead page.
+to a transparent square, because a path that does not exist makes the whole
+Pixoo page fail to render rather than just the image.
 </details>
 
 ### If you have a Pixoo 64
@@ -161,8 +154,9 @@ mode: queued
 max: 2
 ```
 
-`queued` rather than `single` on purpose: a rate limit may delay a render, but
-it must not forget one. See [docs/pixoo.md](docs/pixoo.md).
+`queued` rather than `single`: `single` drops a trigger that arrives while the
+script is still running, which shows up as the panel being a minute behind.
+See [docs/pixoo.md](docs/pixoo.md).
 
 <details>
 <summary>What the badge does and does not do</summary>
@@ -202,9 +196,8 @@ and for Zulrah without a special case for either.
 Health and prayer are optional inputs; leave them empty and those bars are
 simply not drawn. Background and accent are colour pickers.
 
-When nothing is gaining XP the script does nothing at all and leaves the panel
-alone, so it can sit inside your own priority ladder without fighting it for the
-screen.
+When nothing is gaining XP the script does nothing and leaves whatever is on
+the panel alone, so it can share a Pixoo with your other automations.
 
 > **Before you raise the refresh rate:** [docs/pixoo.md](docs/pixoo.md) has the
 > measured limits of the device. Short version — it does not crash under load,
@@ -241,8 +234,7 @@ only on the plugin side.
 ## Credit
 
 Built on [**db1996/homeassistant_runelite**](https://github.com/db1996/homeassistant_runelite)
-and its RuneLite plugin, which do all the actual talking to the game. This
-integration only remembers what they already told you.
+and its RuneLite plugin, which do all the talking to the game.
 
 Pixoo drawing goes through
 [**Faisalthe01/divoom_pixoo**](https://github.com/Faisalthe01/divoom_pixoo).

@@ -10,9 +10,8 @@ useDefault = true
 [allowlist]
 description = """
 tests/test_scan_leaks.py holds one example of every kind of finding the
-publishing guard is supposed to catch, including a fake API key and a fake
-JWT. gitleaks is right about them and they still have to stay: a scanner
-whose tests contain nothing to find proves nothing. Allowlisted by path so
-the exemption cannot quietly widen to another file.
+publishing guard is meant to catch, including a fake API key and a fake JWT.
+gitleaks flags them correctly and they still have to stay for the tests to
+mean anything. Allowlisted by path so the exemption stays on this one file.
 """
 paths = ['''tests/test_scan_leaks\.py''']

@@ -4,10 +4,10 @@
  * Shipped by the integration and registered with the frontend on setup, so it
  * arrives with the HACS download rather than as a second repository.
  *
- * It draws the same thing the Pixoo blueprint draws, from the same attributes,
- * and picks between the same three layouts. The colours are not repeated here:
- * every skill row already carries its own colour, so the card and the panel
- * agree by construction rather than by someone remembering to change both.
+ * Draws the same thing the Pixoo blueprint draws, from the same attributes,
+ * and picks between the same three layouts. Colours come from the skill rows
+ * themselves rather than being listed again here, so changing a skill colour
+ * in the integration changes it in both places.
  */
 
 const BG = "#05060a";
@@ -68,8 +68,8 @@ class OsrsActivityCard extends HTMLElement {
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
         .panel {
-          /* The faint grid is the whole point: it should read as an LED
-             matrix at a glance, the way the device it mirrors does. */
+          /* Faint grid, so it reads as an LED matrix like the panel it
+             mirrors. */
           background:
             repeating-linear-gradient(0deg, ${GRID} 0 1px, transparent 1px 9px),
             repeating-linear-gradient(90deg, ${GRID} 0 1px, transparent 1px 9px),
@@ -138,8 +138,7 @@ class OsrsActivityCard extends HTMLElement {
     }
 
     const top = a.top || rows[0];
-    // The same three-way choice the blueprint makes, so the card and the panel
-    // never disagree about what you are doing.
+    // The same three-way choice the blueprint makes.
     const heading = a.combat && a.style ? a.style : top.key;
     const perHour = Math.round((a.per_hour || 0) / 100) / 10;
 

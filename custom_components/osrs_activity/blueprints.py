@@ -5,9 +5,8 @@ blueprint sitting anywhere else in the repository never reaches the user's
 disk. It travels inside the component instead, and gets copied into the
 blueprint folder on setup.
 
-That copy is the difference between "import this URL, then find it in the
-list" and the blueprint simply being there. Nobody should have to paste a raw
-GitHub link to use the thing they just installed.
+Copying it means it is in the blueprint list after setup, instead of the user
+having to paste a raw GitHub URL into the import dialog.
 """
 
 from __future__ import annotations
@@ -28,9 +27,8 @@ SOURCE_DIR = Path(__file__).parent / "blueprints"
 async def async_install_blueprints(hass: HomeAssistant) -> list[str]:
     """Copy any blueprint this integration ships, once.
 
-    Never overwrites. A blueprint the user has edited is theirs, and silently
-    replacing it on the next update would be the rudest possible way to lose
-    someone's work.
+    Never overwrites an existing file: an update would otherwise silently
+    discard any edit the user had made to it.
     """
     return await hass.async_add_executor_job(_install, hass.config.path())
 
