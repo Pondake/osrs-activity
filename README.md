@@ -18,7 +18,7 @@ and — when it is all combat — which attack style you are using, read off fro
 which of attack, strength and defence are ticking.
 
 Nothing here knows about any particular display. It publishes sensors; what you
-do with them is up to you. There is [a blueprint for a Pixoo 64](#the-pixoo-64-screens)
+do with them is up to you. There is [a blueprint for a Pixoo 64](#the-screens)
 in this repo because that is what it was built for, but a dashboard card is
 just as valid a consumer.
 
@@ -112,6 +112,26 @@ put the Pixoo blueprint into your blueprint folder.
 If the dropdown in step 4 is empty, the RuneLite integration is not set up yet —
 see [Requirements](#requirements).
 
+<details>
+<summary>What it did in the background</summary>
+
+Fetched the 24 skill icons from the OSRS wiki into
+`config/www/osrs_activity/icons/`, normalised onto a 25×25 canvas so a fixed
+position on a panel lines up for every skill. Only when that folder is empty,
+so a restart is not two dozen requests at a volunteer-run wiki. To fetch them
+again — a new skill, or a file you deleted — call
+`osrs_activity.download_skill_icons` with `overwrite: true`.
+
+Copied the Pixoo blueprint into `config/blueprints/script/osrs_activity/`.
+Never overwriting one that is already there: if you have edited it, it is
+yours.
+
+Every skill row then carries `icon_path` (a file, for anything using PIL) and
+`icon_url` (a `/local/` URL, for the frontend). A skill with no icon resolves
+to a transparent square rather than to a path that does not exist — the second
+one is not a missing picture, it is a dead page.
+</details>
+
 ### If you have a Pixoo 64
 
 *Settings → Automations & scenes → Blueprints* → **OSRS XP on a Pixoo 64** →
@@ -154,45 +174,10 @@ The player list in step 4 comes from the RuneLite integration rather than a text
 box on purpose: a typo would silently match no skill sensors at all, and the
 result would look like an integration that just does not work.
 
-## Skill icons
+## The screens
 
-Fetched on first setup; you should not have to think about them. The 24 icons
-come from the OSRS wiki into `config/www/osrs_activity/icons/`, each normalised
-onto a 25×25 canvas, right-aligned. After that nothing that draws them ever
-touches the network — for a dashboard that is a nicety, but for an LED panel it
-is a requirement, because a render that waits on an HTTP request is a render
-that can hang.
-
-It only runs when that folder is empty, so a restart is not two dozen requests
-at a volunteer-run wiki. To fetch them again — a new skill, or a file you
-deleted:
-
-```yaml
-action: osrs_activity.download_skill_icons
-data:
-  overwrite: true
-```
-
-Straight from the wiki rather than hand-drawn, incidentally, because a
-hand-pixelled pickaxe at 24px reads as a hammer.
-
-Every row carries both `icon_path` (a file, for anything using PIL) and
-`icon_url` (a `/local/` URL, for the frontend). A skill with no icon resolves to
-a transparent square rather than to a path that does not exist — the second one
-is not a missing picture, it is a dead page.
-
----
-
-## The Pixoo 64 screens
-
-`custom_components/osrs_activity/blueprints/script/osrs_pixoo64.yaml` is a
-script blueprint that draws the
-whole thing on a [Divoom Pixoo 64](https://github.com/Faisalthe01/divoom_pixoo).
-It installs itself with the integration, so it is already in your blueprint
-list — pick your panel and your XP session sensor and you are done. No YAML to
-copy, no URL to paste, no entity IDs to find and replace.
-
-Three screens, chosen automatically:
+Three screens on a [Divoom Pixoo 64](https://github.com/Faisalthe01/divoom_pixoo),
+chosen automatically from what the sensors report:
 
 | When | Screen |
 |---|---|
@@ -238,29 +223,6 @@ on tasks the plugin knows nothing about.
 **The idle event has no payload,** so with two accounts logged in there is no
 telling which one went idle. Fine as long as only one plays at a time; fixable
 only on the plugin side.
-
----
-
-## Publishing guard
-
-This was carved out of a private Home Assistant config, so the risk was never
-really API keys — it is the ordinary detail that rides along: an entity named
-after a room, a device name, a LAN address, a path off someone's own disk.
-Harmless individually, permanent once pushed.
-
-```bash
-python tools/scan_leaks.py
-```
-
-It checks every tracked file for that, plus tokens, private keys and AI
-attribution, and exits non-zero on a finding. CI runs it on every push
-alongside [gitleaks](https://github.com/gitleaks/gitleaks), which is the gate a
-local git config cannot skip. Names specific to one setup live in
-`tools/private_words.txt`, so adding one does not mean touching code. When a
-match is genuinely fine, `scan-leaks: allow` on the line says so.
-
-To run it before every commit, point git at a hooks directory and drop in a
-hook that calls it with `--staged`.
 
 ---
 
