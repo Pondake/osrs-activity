@@ -32,6 +32,19 @@ SIGNAL_UPDATE = f"{DOMAIN}_update"
 
 EVENT_IDLE = "runelite_idle_notify"
 
+# How long after the plugin's last push the player still counts as logged in.
+#
+# Read from last_ping_time on the RuneLite status sensor rather than from that
+# sensor's own state. The state also depends on the plugin reporting a usable
+# world number, and a build in August 2026 stopped sending one, which left it
+# reading False for a player who was demonstrably online. A ping has no such
+# dependency. last_reported is no substitute: Home Assistant polls the whole
+# platform every 30 seconds, so a logged-out account still looks fresh.
+#
+# 180s against the plugin's own 120s logout timer, so a slow push does not
+# flap the sensor.
+PING_TIMEOUT = 180
+
 MAX_XP = 200_000_000
 MAX_LEVEL = 126
 

@@ -37,14 +37,29 @@
   },
   "entity": {
     "sensor": {
-      "xp_session": { "name": "XP session" },
-      "focus_skill": { "name": "Focus skill" },
-      "session_xp": { "name": "Session XP" },
-      "xp_per_hour": { "name": "XP per hour" },
-      "combat_style": { "name": "Combat style" }
+      "xp_session": {
+        "name": "XP session"
+      },
+      "focus_skill": {
+        "name": "Focus skill"
+      },
+      "session_xp": {
+        "name": "Session XP"
+      },
+      "xp_per_hour": {
+        "name": "XP per hour"
+      },
+      "combat_style": {
+        "name": "Combat style"
+      }
     },
     "binary_sensor": {
-      "idle": { "name": "Idle" }
+      "idle": {
+        "name": "Idle"
+      },
+      "online": {
+        "name": "Online"
+      }
     }
   },
   "services": {

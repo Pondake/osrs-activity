@@ -22,7 +22,7 @@ optional, and neither needs its own install.
 
 ## What you get
 
-One device per player, with six entities.
+One device per player, with seven entities.
 
 | Entity | State | Good for |
 |---|---|---|
@@ -32,6 +32,7 @@ One device per player, with six entities.
 | `sensor.<player>_xp_per_hour` | rate, from the start of the sitting | is this method actually faster |
 | `sensor.<player>_combat_style` | `AGGRESSIVE`, `RANGED`, `Slayin'`, … | switching a light when you switch styles |
 | `binary_sensor.<player>_idle` | on when you are standing around | a nudge when you have been afk for a while |
+| `binary_sensor.<player>_online` | on while the plugin is still pushing | knowing you logged out, without polling |
 
 The XP session sensor is the one to template against. Its attributes carry
 `skills` (what is happening now), `window_skills` (everything with a counter
@@ -77,17 +78,39 @@ anything.
 
 ---
 
-## Requirements
-
-- [`db1996/homeassistant_runelite`](https://github.com/db1996/homeassistant_runelite),
-  set up with at least one player. **HACS will not install this for you** — add
-  it first, or the config flow here has nothing to offer you.
-- The matching RuneLite plugin, with **Skill XP** enabled so XP arrives live
-  instead of once per hiscores poll. Idle detection is optional; its threshold
-  lives in the plugin's own panel, and this integration deliberately keeps no
-  second threshold of its own.
-
 ## Install
+
+Three pieces, in this order: the RuneLite plugin, the RuneLite integration,
+then this one. The first two are not mine, and both are a one-off.
+
+### The RuneLite plugin
+
+RuneLite → *Configuration* → **Plugin Hub** → search for **Home Assistant** →
+*Install*. It is [db1996/homeassistant](https://github.com/db1996/homeassistant).
+
+In Home Assistant, make a long-lived access token: click your name, bottom
+left → *Security* → **Long-lived access tokens** → *Create token*. Copy it
+once; it is not shown again.
+
+Back in the plugin's options, fill in your Home Assistant base URL
+(`http://homeassistant.local:8123` or whatever yours is) and paste the token.
+Then switch on the events you want. **Skill XP is the one this needs** — it is
+what makes XP arrive the moment you earn it instead of once per hiscores poll.
+Idle detection is optional and drives `binary_sensor.<player>_idle`; its
+threshold lives here, in the plugin, not in Home Assistant.
+
+### The RuneLite integration
+
+[`db1996/homeassistant_runelite`](https://github.com/db1996/homeassistant_runelite)
+is in the default HACS store, so there is nothing to add by hand: HACS → search
+**Runelite** → *Download*. Restart, then add it from *Settings → Devices &
+services* and give it your account name.
+
+You should now have a device per player with a sensor per skill. Log in and
+train something for a few seconds to check the numbers move. If they do not,
+stop here — nothing below can work without them.
+
+### This integration
 
 Four steps. The skill icons and the Pixoo blueprint are handled on first
 setup; there is nothing to run afterwards.
@@ -104,16 +127,14 @@ Activity**, open it, and press **Download**. This is the step people miss.
 *Settings → System → top right → Restart*.
 
 **4. Add the integration.** *Settings → Devices & services → + Add integration*
-→ **OSRS Activity** → pick your player from the dropdown. The two windows have
+→ **OSRS Activity** → pick your player from the dropdown. If that dropdown is
+empty, the RuneLite integration above is not set up yet. The two windows have
 sensible defaults; [see above](#two-windows-two-jobs) for what they do.
 
-That is the install. You have six entities under a device named after your
+That is the install. You have seven entities under a device named after your
 player, the **OSRS Activity** card is in your card picker, and in the
 background the integration has fetched the skill icons and put the Pixoo
 blueprint into your blueprint folder.
-
-If the dropdown in step 4 is empty, the RuneLite integration is not set up yet —
-see [Requirements](#requirements).
 
 <details>
 <summary>What it did in the background</summary>

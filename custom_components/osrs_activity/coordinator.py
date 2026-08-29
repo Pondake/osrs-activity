@@ -23,6 +23,7 @@ from .const import (
     EVENT_IDLE,
     ICON_BLANK,
     ICON_DIR,
+    PING_TIMEOUT,
     RUNELITE_DOMAIN,
     SIGNAL_UPDATE,
     TICK_SECONDS,
@@ -39,6 +40,8 @@ SKILL_MARKER = "_skill_"
 # Overall XP. It moves on every gain in every skill, so it would report as a
 # skill that is always active.
 SKILL_TOTAL = "total"
+# The RuneLite status sensor for a player, which carries last_ping_time.
+STATUS_MARKER = "_player_status"
 
 
 def sanitize(text: str) -> str:
@@ -66,7 +69,11 @@ class ActivityCoordinator:
         )
         self.data: dict = {}
         self._prefix = f"{RUNELITE_DOMAIN}_{sanitize(username)}{SKILL_MARKER}"
+        self._status_uid = (
+            f"{RUNELITE_DOMAIN}_{sanitize(username)}{STATUS_MARKER}"
+        )
         self._entities: dict[str, str] = {}  # entity_id -> skill
+        self._status_entity: str | None = None
         self._unsub_states = None
         self._unsubs: list = []
         self._icons: set[str] = set()
@@ -115,8 +122,12 @@ class ActivityCoordinator:
         """
         registry = er.async_get(self.hass)
         found: dict[str, str] = {}
+        status = None
         for entry in registry.entities.values():
             if entry.platform != RUNELITE_DOMAIN or not entry.unique_id:
+                continue
+            if entry.unique_id == self._status_uid:
+                status = entry.entity_id
                 continue
             if not entry.unique_id.startswith(self._prefix):
                 continue
@@ -124,16 +135,18 @@ class ActivityCoordinator:
             if skill and skill != SKILL_TOTAL:
                 found[entry.entity_id] = skill
 
-        if found == self._entities:
+        if found == self._entities and status == self._status_entity:
             return
 
         self._entities = found
+        self._status_entity = status
         if self._unsub_states:
             self._unsub_states()
             self._unsub_states = None
-        if found:
+        watched = list(found) + ([status] if status else [])
+        if watched:
             self._unsub_states = async_track_state_change_event(
-                self.hass, list(found), self._handle_state
+                self.hass, watched, self._handle_state
             )
         _LOGGER.debug(
             "%s: tracking %d skill sensors", self.username, len(found)
@@ -181,6 +194,10 @@ class ActivityCoordinator:
             return
         skill = self._entities.get(event.data["entity_id"])
         if skill is None:
+            # The status sensor is watched too, so a login shows up without
+            # waiting for the tick.
+            if event.data["entity_id"] == self._status_entity:
+                self._publish()
             return
         xp = _as_int(new_state.state)
         if xp is None:
@@ -226,6 +243,7 @@ class ActivityCoordinator:
                 for row in data["window_skills"]
             ),
             data["idle"],
+            data["online"],
             data["window"],
             tuple(row["key"] for row in data["skills"]),
             data["style"],
@@ -244,6 +262,7 @@ class ActivityCoordinator:
         data["style_icon"] = self._icon_path(data["style_key"])
         data["style_icon_url"] = self._icon_url(data["style_key"])
         data["account"] = self.username
+        data["online"], data["last_ping"] = self._liveness()
 
     def _resolve(self, skill: str) -> str | None:
         """The icon for a skill, or the transparent stand-in, or nothing.
@@ -265,6 +284,24 @@ class ActivityCoordinator:
     def _icon_url(self, skill: str) -> str | None:
         name = self._resolve(skill)
         return f"/local/{ICON_DIR}/{name}" if name else None
+
+
+    def _liveness(self) -> tuple[bool, str | None]:
+        """Whether the plugin is still pushing, and when it last did."""
+        if not self._status_entity:
+            return False, None
+        state = self.hass.states.get(self._status_entity)
+        if state is None:
+            return False, None
+        ping = state.attributes.get("last_ping_time")
+        if not ping:
+            return False, None
+        try:
+            seen = datetime.fromisoformat(ping)
+        except (TypeError, ValueError):
+            return False, None
+        age = (datetime.now(seen.tzinfo) - seen).total_seconds()
+        return age <= PING_TIMEOUT, ping
 
 
 def _as_int(value) -> int | None:
