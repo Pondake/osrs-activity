@@ -84,20 +84,66 @@ anything.
 
 ## Install
 
-Click the badge at the top, or do it by hand: HACS → three dots → **Custom
-repositories** → `https://github.com/Pondake/osrs-activity`, category
-**Integration**. Then add **OSRS Activity** from *Settings → Devices &
-services*, and pick your player from the dropdown.
+Two separate things get installed, and it is worth knowing that before you
+start. **The integration** publishes the sensors and asks only which player to
+follow. **The blueprint** draws them on a Pixoo and asks only which panel to
+draw on. They are installed in different places and neither knows about the
+other — so if you are here for the sensors and have no Pixoo, stop after
+step 4.
 
-The badge is a [My Home Assistant](https://my.home-assistant.io) link, which
-works for custom repositories as well as for ones in the default store — that
-is what the `category` parameter in it is for. It opens HACS on your own
-instance and offers to add this repository; it cannot install anything by
-itself.
+**1. Add the repository to HACS.** Click the badge at the top, or by hand:
+HACS → the three dots, top right → *Custom repositories* → paste
+`https://github.com/Pondake/osrs-activity`, type **Integration** → *Add*.
 
-The player list comes from the RuneLite integration rather than a text box on
-purpose: a typo would silently match no skill sensors at all, and the result
-would look like an integration that just does not work.
+**2. Download it.** Adding a custom repository only tells HACS the repository
+exists; it does not install anything. Search HACS for **OSRS Activity**, open
+it, and press **Download**. This is the step people miss.
+
+**3. Restart Home Assistant.** New integrations are only picked up at startup.
+*Settings → System → top right → Restart*.
+
+**4. Add the integration.** *Settings → Devices & services → + Add integration*
+→ **OSRS Activity** → pick your player from the dropdown, and set the two
+windows (the defaults are fine).
+
+You now have six entities under a device named after your player. If the
+dropdown is empty, the RuneLite integration is not set up yet — see
+[Requirements](#requirements).
+
+**5. Fetch the skill icons.** *Developer tools → Actions* →
+`osrs_activity.download_skill_icons` → *Perform action*. Once, and only again
+when a new skill comes out. Skip this and every icon is a blank square.
+
+**6. Only if you have a Pixoo 64:** import the blueprint. *Settings →
+Automations & scenes → Blueprints → Import blueprint*, and paste:
+
+```
+https://github.com/Pondake/osrs-activity/blob/main/blueprints/script/osrs_pixoo64.yaml
+```
+
+Then *Create script* from it. That is where you pick your Pixoo, your XP
+session sensor, and optionally your health and prayer sensors. Call the
+resulting script from an automation whenever you want the panel redrawn — a
+state trigger on the XP session sensor is the obvious one.
+
+<details>
+<summary>Why the badge cannot do all of this for you</summary>
+
+The badge is a [My Home Assistant](https://my.home-assistant.io) link. It works
+for custom repositories as well as for ones in the default store — that is what
+the `category` parameter in it is for — but all it does is open HACS on your own
+instance and offer to add the repository. Downloading, restarting and
+configuring are still steps 2 to 4.
+
+On HACS 2.0.5 that confirmation dialog can come up with no text and an
+unlabelled button, because HACS asks for it before its own translations have
+loaded. The unlabelled button is *Add*. This happens with any custom
+repository and is nothing to do with this one.
+</details>
+
+The player list in step 4 comes from the RuneLite integration rather than a text
+box on purpose: a typo would silently match no skill sensors at all, and the
+result would look like an integration that just does not work.
 
 ## Skill icons
 
@@ -127,8 +173,9 @@ is not a missing picture, it is a dead page.
 
 `blueprints/script/osrs_pixoo64.yaml` is a script blueprint that draws the
 whole thing on a [Divoom Pixoo 64](https://github.com/Faisalthe01/divoom_pixoo).
-Import it by URL, pick your panel and your XP session sensor, and you are done —
-no YAML to copy and no entity IDs to find and replace.
+Import it, pick your panel and your XP session sensor, and you are done — no
+YAML to copy and no entity IDs to find and replace. See step 6 of
+[Install](#install) for where to paste the URL.
 
 Three screens, chosen automatically:
 
