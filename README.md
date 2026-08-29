@@ -158,26 +158,17 @@ Pixoo page fail to render rather than just the image.
 ### If you have a Pixoo 64
 
 *Settings → Automations & scenes → Blueprints* → **OSRS XP on a Pixoo 64** →
-*Create script*. It is already in the list; there is no URL to paste. Pick your
-panel and your XP session sensor, optionally your health and prayer sensors,
-and save.
+*Create automation*. It is already in the list; there is no URL to paste. Pick
+your Pixoo and your XP session sensor, optionally your health and prayer
+sensors, and save.
 
-Then call that script whenever the panel should be redrawn — an automation on
-the XP session sensor changing is the obvious one:
+That is all — it redraws itself whenever the sensor changes, and the sensor
+only changes when something actually happened. There is no script to call and
+no trigger to write.
 
-```yaml
-triggers:
-  - trigger: state
-    entity_id: sensor.YOUR_PLAYER_xp_session
-actions:
-  - action: script.YOUR_SCRIPT
-mode: queued
-max: 2
-```
-
-`queued` rather than `single`: `single` drops a trigger that arrives while the
-script is still running, which shows up as the panel being a minute behind.
-See [docs/pixoo.md](docs/pixoo.md).
+If you already have automations drawing to the same Pixoo, this one stays out
+of their way: when nothing is gaining XP it does nothing at all rather than
+clearing the panel.
 
 <details>
 <summary>What the badge does and does not do</summary>

@@ -9,17 +9,20 @@ blueprint:
     screen when you are focused on one thing, and a bar chart for anything else.
 
 
-    When nothing is gaining XP this script does nothing at all and leaves the
-    panel alone -- so it can sit inside your own priority ladder without
-    fighting it for the screen.
+    Redraws itself whenever the XP session sensor changes, so creating it is
+    all there is to it.
+
+
+    When nothing is gaining XP it does nothing and leaves whatever is on the
+    panel alone, so it can share a Pixoo with your other automations.
 
 
     Needs the `osrs_activity` integration and `gickowtf/pixoo-homeassistant`,
     which is in the default HACS store.
-  domain: script
+  domain: automation
   homeassistant:
-    min_version: "2024.6.0"
-  source_url: https://github.com/Pondake/osrs-activity/blob/main/custom_components/osrs_activity/blueprints/script/osrs_pixoo64.yaml
+    min_version: "2024.10.0"
+  source_url: https://github.com/Pondake/osrs-activity/blob/main/custom_components/osrs_activity/blueprints/automation/osrs_pixoo64.yaml
   input:
     panel:
       name: Pixoo page
@@ -104,10 +107,17 @@ blueprint:
               unit_of_measurement: s
               mode: box
 
+# Every publish of the sensor is a redraw. The integration only writes when
+# something actually changed, so this does not fire on a timer.
+triggers:
+  - trigger: state
+    entity_id: !input activity
+
+# queued rather than single: single drops a trigger that arrives mid-run, which
+# shows up as the panel being a minute behind. max 2 keeps the backlog short.
 mode: queued
 max: 2
 max_exceeded: silent
-icon: mdi:sword-cross
 
 variables:
   activity: !input activity
@@ -148,7 +158,7 @@ variables:
     {% if p < 0 %}{{ bg }}{% elif p > 50 %}[0,220,60]
     {% elif p > 25 %}[255,180,0]{% else %}[255,40,40]{% endif %}
 
-sequence:
+actions:
   - condition: template
     value_template: "{{ active >= 1 }}"
 

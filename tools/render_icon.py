@@ -25,12 +25,17 @@ SOURCE = ROOT / "assets" / "icon.svg"
 # name -> edge length. 256 and 512 are what the Home Assistant brands
 # repository asks for; 1024 is a comfortable size for a GitHub social preview
 # to be cropped from.
+BRAND = ROOT / "custom_components" / "osrs_activity" / "brand"
 OUTPUTS = {
-    ROOT / "custom_components" / "osrs_activity" / "icon.png": 256,
-    ROOT / "custom_components" / "osrs_activity" / "icon@2x.png": 512,
-    ROOT / "custom_components" / "osrs_activity" / "logo.png": 256,
-    ROOT / "custom_components" / "osrs_activity" / "logo@2x.png": 512,
+    # Where HACS looks for a repository's own brand assets, and the sizes the
+    # home-assistant/brands repository asks for. Home Assistant itself does not
+    # read these -- its frontend fetches icons from brands.home-assistant.io,
+    # which needs a pull request there. These make HACS's check pass and are
+    # the files that pull request wants.
+    BRAND / "icon.png": 256,
+    BRAND / "icon@2x.png": 512,
     ROOT / "assets" / "icon-256.png": 256,
+    # A comfortable size to crop a GitHub social preview from.
     ROOT / "assets" / "icon-1024.png": 1024,
 }
 

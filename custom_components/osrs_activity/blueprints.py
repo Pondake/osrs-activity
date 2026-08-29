@@ -6,7 +6,10 @@ disk. It travels inside the component instead, and gets copied into the
 blueprint folder on setup.
 
 Copying it means it is in the blueprint list after setup, instead of the user
-having to paste a raw GitHub URL into the import dialog.
+having to paste a raw GitHub URL into the import dialog. It is an automation
+blueprint rather than a script one, so creating it from the list is also
+switching it on -- a script would have needed an automation written by hand to
+call it.
 """
 
 from __future__ import annotations

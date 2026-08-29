@@ -23,11 +23,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # Brand assets are a requirement of the DEFAULT store, not of a
-          # custom repository, and nothing can be listed in
-          # home-assistant/brands before it exists. Drop this the day this is
-          # submitted there.
-          ignore: brands
 
   ruff:
     name: ruff
