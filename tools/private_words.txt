@@ -1,0 +1,22 @@
+# Words that only mean something inside one particular setup, one per line.
+# An entity or device named after a room is the most likely thing to slip
+# through, because it looks like ordinary code.
+#
+# This file is not itself scanned -- it cannot be, it is the list. Keep it to
+# words, never to secrets: it is published along with everything else.
+
+kantoor
+washok
+wasmachine
+droger
+vaatwasser
+babyfoon
+luchtfilter
+ventilatie
+slaapkamer
+woonkamer
+zolder
+voordeur
+achtertuin
+meterkast
+divoom_pixoo_64
