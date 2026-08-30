@@ -60,7 +60,10 @@ class OsrsActivityCard extends HTMLElement {
   }
 
   _build() {
-    this.attachShadow({ mode: "open" });
+    // Once only. setConfig clears _built so the styles are rebuilt after an
+    // edit, but a second attachShadow throws and the card stops updating
+    // until the page is reloaded.
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this.shadowRoot.innerHTML = `
       <style>
         ha-card {
@@ -83,9 +86,10 @@ class OsrsActivityCard extends HTMLElement {
           font-size: 15px; font-weight: 700; letter-spacing: .08em;
         }
         .style { color: ${GOLD}; text-transform: uppercase; }
-        .gained { margin-left: auto; color: ${GOLD}; font-size: 13px; }
+        .level { color: ${TEXT}; font-size: 12px; }
+        .gained { margin-left: auto; color: #ffdc00; font-size: 13px; }
         .badge {
-          margin-left: auto; background: ${IDLE}; color: #3c2d06;
+          background: ${IDLE}; color: #3c2d06;
           font-size: 11px; font-weight: 700; letter-spacing: .1em;
           padding: 2px 7px; border-radius: 3px;
         }
@@ -106,7 +110,7 @@ class OsrsActivityCard extends HTMLElement {
           font-variant-numeric: tabular-nums;
         }
         .foot .next { margin-left: auto; }
-        .level { margin-top: 6px; }
+        .bar { margin-top: 6px; }
         .quiet { color: ${DIM}; font-size: 13px; padding: 6px 0 2px; }
         .err { padding: 16px; color: var(--error-color, #db4437); }
       </style>
@@ -149,21 +153,25 @@ class OsrsActivityCard extends HTMLElement {
 
     const top = a.top || rows[0];
     // The same three-way choice the blueprint makes.
-    const heading = a.combat && a.style ? a.style : top.key;
+    const combat = a.combat && a.style;
+    const heading = combat ? a.style : top.key;
+    // The panel puts the level beside the skill name on the single-skill
+    // screen and the slayer kill count beside the heading in combat. Same
+    // information, same corner.
+    const level = combat || rows.length > 1 ? "" : top.level;
+    const kills = combat ? Number(a.slayer_kills) || 0 : 0;
     const perHour = Math.round((a.per_hour || 0) / 100) / 10;
 
     this._panel.innerHTML = `
       <div class="head">
         <span class="style">${esc(heading)}</span>
-        ${
-          idle
-            ? '<span class="badge">IDLE</span>'
-            : `<span class="gained">+${esc(a.total_gained_short || "0")} XP</span>`
-        }
+        ${kills ? `<span class="level">x${kills}</span>` : ""}
+        ${level ? `<span class="level">${esc(level)}</span>` : ""}
+        <span class="gained">+${esc(a.total_gained_short || "0")} XP</span>
       </div>
       <div class="rule"></div>
       ${rows.slice(0, 5).map((row) => this._row(row, rows.length > 1)).join("")}
-      <div class="level">
+      <div class="bar">
         <div class="track">
           <div class="fill" style="width:${Number(top.pct) || 0}%;
                background:${esc(top.color_hex || GOLD)}"></div>
@@ -171,7 +179,7 @@ class OsrsActivityCard extends HTMLElement {
       </div>
       <div class="foot">
         <span>${esc(top.xp_short || "")} XP</span>
-        <span>${perHour}k/h</span>
+        ${idle ? '<span class="badge">IDLE</span>' : `<span>${perHour}k/h</span>`}
         ${
           top.next_level
             ? `<span class="next">${esc(top.to_go_short)} to L${esc(top.next_level)}</span>`
