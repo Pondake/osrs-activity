@@ -44,10 +44,44 @@ class OsrsActivityCard extends HTMLElement {
 
   setConfig(config) {
     if (!config.entity) {
-      throw new Error("Pick the XP session sensor");
+      throw new Error("Pick the Activity sensor");
     }
     this._config = config;
     this._built = false;
+  }
+
+  /** Percent full for a vitals pair, or -1 when it is not configured. */
+  _vital(currentKey, skillKey) {
+    const current = this._config[currentKey];
+    const skill = this._config[skillKey];
+    if (!current || !skill) return -1;
+    const now = Number(this._hass.states[current]?.state);
+    const max = Number(this._hass.states[skill]?.attributes?.level);
+    if (!Number.isFinite(now) || !Number.isFinite(max) || max <= 0) return -1;
+    return Math.max(0, Math.min(100, Math.round((now / max) * 100)));
+  }
+
+  _vitals() {
+    const hp = this._vital("health", "hitpoints_skill");
+    const pray = this._vital("prayer", "prayer_skill");
+    if (hp < 0 && pray < 0) return "";
+    // Same thresholds as the panel: green above half, amber above a quarter.
+    const hpColour = hp > 50 ? "#00dc3c" : hp > 25 ? "#ffb400" : "#ff2828";
+    return `
+      <div class="vitals">
+        ${hp < 0 ? "" : this._vitalRow("HP", hp, hpColour)}
+        ${pray < 0 ? "" : this._vitalRow("PRAY", pray, "#8cc8ff")}
+      </div>`;
+  }
+
+  _vitalRow(label, pct, colour) {
+    return `
+      <div class="vital">
+        <span class="label">${label}</span>
+        <div class="track">
+          <div class="fill" style="width:${pct}%; background:${colour}"></div>
+        </div>
+      </div>`;
   }
 
   getCardSize() {
@@ -112,6 +146,11 @@ class OsrsActivityCard extends HTMLElement {
         .foot .next { margin-left: auto; }
         .bar { margin-top: 6px; }
         .quiet { color: ${DIM}; font-size: 13px; padding: 6px 0 2px; }
+        .vitals { margin-top: 12px; }
+        .vital {
+          display: grid; grid-template-columns: 42px 1fr;
+          align-items: center; gap: 8px; margin-top: 6px;
+        }
         .err { padding: 16px; color: var(--error-color, #db4437); }
       </style>
       <ha-card><div class="panel"></div></ha-card>`;
@@ -143,11 +182,25 @@ class OsrsActivityCard extends HTMLElement {
     const idle = Boolean(a.idle);
 
     if (!rows.length) {
+      // Logged in and not training is the panel's standby screen: name, health
+      // and prayer. Logged out is a quiet line, because there is nothing to say.
+      const online = Boolean(a.online);
       this._panel.innerHTML = `
-        <div class="head"><span class="style">OSRS</span>
-          ${idle ? '<span class="badge">IDLE</span>' : ""}</div>
+        <div class="head">
+          <span class="style">${esc(a.account || "OSRS")}</span>
+          ${
+            online
+              ? `<span class="gained">${idle ? "" : "ONLINE"}</span>`
+              : '<span class="gained">OFFLINE</span>'
+          }
+          ${idle ? '<span class="badge">IDLE</span>' : ""}
+        </div>
         <div class="rule"></div>
-        <div class="quiet">Nothing training right now.</div>`;
+        ${
+          online
+            ? this._vitals() || '<div class="quiet">Not training.</div>'
+            : '<div class="quiet">Logged out.</div>'
+        }`;
       return;
     }
 
@@ -185,7 +238,8 @@ class OsrsActivityCard extends HTMLElement {
             ? `<span class="next">${esc(top.to_go_short)} to L${esc(top.next_level)}</span>`
             : '<span class="next">200m</span>'
         }
-      </div>`;
+      </div>
+      ${combat ? this._vitals() : ""}`;
   }
 
   _row(row, showBar) {
@@ -225,7 +279,14 @@ class OsrsActivityCardEditor extends HTMLElement {
     if (!this._form) {
       this._form = document.createElement("ha-form");
       this._form.computeLabel = (schema) =>
-        schema.name === "entity" ? "XP session sensor" : schema.name;
+        ({
+          entity: "Activity sensor",
+          vitals: "Health and prayer",
+          health: "Current hitpoints",
+          hitpoints_skill: "Hitpoints skill",
+          prayer: "Current prayer points",
+          prayer_skill: "Prayer skill",
+        })[schema.name] || schema.name;
       this._form.addEventListener("value-changed", (event) => {
         this.dispatchEvent(
           new CustomEvent("config-changed", {
@@ -239,11 +300,24 @@ class OsrsActivityCardEditor extends HTMLElement {
     }
     this._form.hass = this._hass;
     this._form.data = this._config;
+    const runelite = { entity: { integration: "runelite", domain: "sensor" } };
     this._form.schema = [
       {
         name: "entity",
         required: true,
         selector: { entity: { integration: "osrs_activity", domain: "sensor" } },
+      },
+      {
+        name: "vitals",
+        type: "expandable",
+        // Optional, exactly as in the blueprint: leave them empty and the bars
+        // are not drawn.
+        schema: [
+          { name: "health", selector: runelite },
+          { name: "hitpoints_skill", selector: runelite },
+          { name: "prayer", selector: runelite },
+          { name: "prayer_skill", selector: runelite },
+        ],
       },
     ];
   }

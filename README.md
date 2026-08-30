@@ -211,8 +211,14 @@ Health and prayer are optional inputs; leave them empty and those bars are
 simply not drawn. Background and accent are colour pickers.
 
 That last one is a switch. On, the panel says something between sessions
-instead of going dark. Off, nothing is drawn at all while you are not
-training, which is what you want if another automation shares the panel.
+instead of going dark. Off, nothing is drawn at all while you are not training.
+
+**If something else already draws to the same Pixoo,** the two will fight and
+whichever pushed last wins. Use **Only draw when** for that: it takes any
+condition, so if you have an `input_select` deciding what the panel shows,
+require it to be on the value that means "OSRS". The card takes the same
+optional health and prayer entities as the blueprint, so it shows the same
+four screens.
 
 > **Before you raise the refresh rate:** [docs/pixoo.md](docs/pixoo.md) has the
 > measured limits of the device. Short version — it does not crash under load,

@@ -78,6 +78,17 @@ blueprint:
             entity:
               integration: runelite
               domain: sensor
+    only_when:
+      name: Only draw when
+      description: >-
+        Optional. Extra conditions that all have to hold before anything is
+        drawn. If something else shares this panel and decides what belongs on
+        it, put that decision here — an input_select that has to be on "Auto",
+        say. Without it, this draws whenever there is something to draw and the
+        last automation to push wins.
+      default: []
+      selector:
+        condition:
     standby:
       name: Standby screen
       description: >-
@@ -124,6 +135,9 @@ blueprint:
 triggers:
   - trigger: state
     entity_id: !input activity
+
+# Whatever the user said has to be true before this panel is theirs to draw on.
+conditions: !input only_when
 
 # queued rather than single: single drops a trigger that arrives mid-run, which
 # shows up as the panel being a minute behind. max 2 keeps the backlog short.
