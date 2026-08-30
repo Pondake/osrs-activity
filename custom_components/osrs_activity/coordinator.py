@@ -81,6 +81,7 @@ class ActivityCoordinator:
         self._icons: set[str] = set()
         self._icon_dir = Path(hass.config.path("www")) / ICON_DIR
         self._last_signature: tuple | None = None
+        self._was_online: bool | None = None
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -246,8 +247,19 @@ class ActivityCoordinator:
         XP per hour keep moving even when nothing happened -- which is a
         recorder row and a panel redraw every couple of seconds for no reason.
         """
+        # Liveness first: logging out ends the sitting, and that has to happen
+        # before the snapshot or the counters survive into it.
+        online, ping = self._liveness()
+        if self._was_online and not online:
+            ended = self.engine.end()
+            if ended:
+                _LOGGER.debug(
+                    "%s: logged out, dropped %d counter(s)", self.username, ended
+                )
+        self._was_online = online
+
         data = self.engine.snapshot(datetime.now())
-        self._decorate(data)
+        self._decorate(data, online, ping)
 
         signature = (
             tuple(
@@ -266,7 +278,7 @@ class ActivityCoordinator:
         self.data = data
         async_dispatcher_send(self.hass, f"{SIGNAL_UPDATE}_{self.entry_id}")
 
-    def _decorate(self, data: dict) -> None:
+    def _decorate(self, data: dict, online: bool, ping: str | None) -> None:
         """Add the icon paths. The engine stays unaware of where files live."""
         for row in data["window_skills"]:
             row["icon_path"] = self._icon_path(row["key"])
@@ -274,7 +286,7 @@ class ActivityCoordinator:
         data["style_icon"] = self._icon_path(data["style_key"])
         data["style_icon_url"] = self._icon_url(data["style_key"])
         data["account"] = self.username
-        data["online"], data["last_ping"] = self._liveness()
+        data["online"], data["last_ping"] = online, ping
         data["health_pct"] = self._vital("health", "health_max")
         data["prayer_pct"] = self._vital("prayer", "prayer_max")
 

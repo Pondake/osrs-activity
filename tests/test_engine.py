@@ -175,6 +175,26 @@ def test_idle_is_cleared_by_the_next_gain():
     assert eng.snapshot(T0 + timedelta(seconds=40))["idle"] is False
 
 
+def test_logging_out_ends_the_sitting():
+    """The window forgives a pause at the rocks; it does not forgive a logout."""
+    eng = make(window_minutes=5)
+    eng.record("mining", 1000, 900, T0)
+    eng.mark_idle(T0)
+    assert eng.end() == 1
+
+    snapshot = eng.snapshot(T0)
+    assert snapshot["active"] == 0
+    assert snapshot["idle"] is False
+
+    # And logging back in starts from zero rather than resuming.
+    eng.record("mining", 1100, 1000, T0 + timedelta(seconds=30))
+    assert eng.snapshot(T0 + timedelta(seconds=30))["total_gained"] == 100
+
+
+def test_ending_an_empty_engine_is_harmless():
+    assert make().end() == 0
+
+
 def test_sessions_survive_a_round_trip():
     eng = make()
     eng.record("mining", 1000, 900, T0)

@@ -176,6 +176,18 @@ class ActivityEngine:
     def mark_idle(self, now: datetime) -> None:
         self.idle_at = now
 
+    def end(self) -> int:
+        """Drop every counter. Returns how many there were.
+
+        For logging out. The session window exists so that stepping away from
+        the rocks for a minute does not restart your count, but logging out is
+        not stepping away -- you cannot carry on a sitting you left.
+        """
+        count = len(self.sessions)
+        self.sessions.clear()
+        self.idle_at = None
+        return count
+
     def restore(self, raw: dict) -> int:
         """Bring sessions back from a stored snapshot after a reload."""
         for skill, values in (raw or {}).items():

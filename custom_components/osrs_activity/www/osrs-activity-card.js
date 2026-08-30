@@ -4,20 +4,31 @@
  * Shipped by the integration and registered with the frontend on setup, so it
  * arrives with the HACS download rather than as a second repository.
  *
- * Draws the same thing the Pixoo blueprint draws, from the same attributes,
- * and picks between the same three layouts. Colours come from the skill rows
- * themselves rather than being listed again here, so changing a skill colour
- * in the integration changes it in both places.
+ * This is not a dashboard card that happens to show the same numbers as the
+ * Pixoo. It is the panel: a square 64x64 viewBox with every element at the
+ * coordinates the blueprint draws it at, scaled up. Same four screens, same
+ * choice between them, same colours -- read from the sensor rather than
+ * repeated here. A position that changes in one has to change in the other,
+ * which is the point: one design, two places.
  */
 
-const BG = "#05060a";
-const PANEL = "#0d0f16";
-const GRID = "rgba(226,226,255,0.05)";
-const LINE = "#5a4a36";
-const GOLD = "#ffd21f";
-const DIM = "#8d8ba6";
-const TEXT = "#c8bda8";
-const IDLE = "#ffb400";
+const BG = "#2a2218";
+const ACCENT = "#ff981f";
+const RULE = "#5a4a36";
+const TEXT = "#c8aa78";
+const DIM = "#8c785a";
+const TRACK = "#483c2c";
+const IDLE_BG = "#ffb400";
+const IDLE_FG = "#3c2d0a";
+const GOLD = "#ffdc00";
+const PRAYER = "#8cc8ff";
+const GREY = "#969ba0";
+
+// PICO_8 is 4px per character and about 5px tall, and the panel positions text
+// by its top-left corner. SVG positions it by the baseline, hence the offset;
+// textLength pins each glyph into the same 4px cell the device uses.
+const CELL = 4;
+const BASELINE = 5;
 
 const esc = (value) =>
   String(value ?? "").replace(
@@ -25,6 +36,37 @@ const esc = (value) =>
     (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
   );
+
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+
+/** A line of panel text. `anchor` "end" mirrors the device's align: right. */
+function text(x, y, body, colour, anchor) {
+  const content = String(body ?? "");
+  if (!content) return "";
+  const length = content.length * CELL;
+  return `<text x="${anchor === "end" ? x - length : x}" y="${y + BASELINE}"
+    fill="${colour}" textLength="${length}"
+    lengthAdjust="spacingAndGlyphs">${esc(content)}</text>`;
+}
+
+const rect = (x, y, w, h, colour) =>
+  w > 0 && h > 0
+    ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${colour}"/>`
+    : "";
+
+/** Track plus fill, the pattern the panel uses for every bar it draws. */
+const bar = (x, y, w, h, pct, colour) =>
+  rect(x, y, w, h, TRACK) +
+  rect(x, y, clamp(Math.round((pct / 100) * w), 0, w), h, colour);
+
+const hpColour = (pct) =>
+  pct < 0 ? BG : pct > 50 ? "#00dc3c" : pct > 25 ? "#ffb400" : "#ff2828";
+
+const image = (href, x, y, size) =>
+  href
+    ? `<image href="${esc(href)}" x="${x}" y="${y}" width="${size}"
+       height="${size}" style="image-rendering:pixelated"/>`
+    : "";
 
 class OsrsActivityCard extends HTMLElement {
   static getConfigElement() {
@@ -43,41 +85,13 @@ class OsrsActivityCard extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config.entity) {
-      throw new Error("Pick the Activity sensor");
-    }
+    if (!config.entity) throw new Error("Pick the Activity sensor");
     this._config = config;
     this._built = false;
   }
 
-  _vitals() {
-    // Resolved by the integration, which already knows the player. Nothing to
-    // configure, and nothing to keep in step with the blueprint.
-    const a = this._hass.states[this._config.entity]?.attributes || {};
-    const hp = a.health_pct ?? -1;
-    const pray = a.prayer_pct ?? -1;
-    if (hp < 0 && pray < 0) return "";
-    // Same thresholds as the panel: green above half, amber above a quarter.
-    const hpColour = hp > 50 ? "#00dc3c" : hp > 25 ? "#ffb400" : "#ff2828";
-    return `
-      <div class="vitals">
-        ${hp < 0 ? "" : this._vitalRow("HP", hp, hpColour)}
-        ${pray < 0 ? "" : this._vitalRow("PRAY", pray, "#8cc8ff")}
-      </div>`;
-  }
-
-  _vitalRow(label, pct, colour) {
-    return `
-      <div class="vital">
-        <span class="label">${label}</span>
-        <div class="track">
-          <div class="fill" style="width:${pct}%; background:${colour}"></div>
-        </div>
-      </div>`;
-  }
-
   getCardSize() {
-    return 4;
+    return 5;
   }
 
   set hass(hass) {
@@ -87,66 +101,29 @@ class OsrsActivityCard extends HTMLElement {
 
   _build() {
     // Once only. setConfig clears _built so the styles are rebuilt after an
-    // edit, but a second attachShadow throws and the card stops updating
-    // until the page is reloaded.
+    // edit, but a second attachShadow throws and the card stops updating until
+    // the page is reloaded.
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this.shadowRoot.innerHTML = `
       <style>
-        ha-card {
-          background: ${BG};
-          border: none;
-          overflow: hidden;
+        ha-card { background: ${BG}; border: none; overflow: hidden; }
+        svg {
+          display: block;
+          width: 100%;
+          /* Square, because the thing it mirrors is square. */
+          aspect-ratio: 1 / 1;
+        }
+        text {
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        }
-        .panel {
-          /* Faint grid, so it reads as an LED matrix like the panel it
-             mirrors. */
-          background:
-            repeating-linear-gradient(0deg, ${GRID} 0 1px, transparent 1px 9px),
-            repeating-linear-gradient(90deg, ${GRID} 0 1px, transparent 1px 9px),
-            ${PANEL};
-          padding: 14px 16px 16px;
-        }
-        .head {
-          display: flex; align-items: baseline; gap: 8px;
-          font-size: 15px; font-weight: 700; letter-spacing: .08em;
-        }
-        .style { color: ${GOLD}; text-transform: uppercase; }
-        .level { color: ${TEXT}; font-size: 12px; }
-        .gained { margin-left: auto; color: #ffdc00; font-size: 13px; }
-        .badge {
-          background: ${IDLE}; color: #3c2d06;
-          font-size: 11px; font-weight: 700; letter-spacing: .1em;
-          padding: 2px 7px; border-radius: 3px;
-        }
-        .rule { height: 1px; background: ${LINE}; margin: 10px 0 12px; }
-        .row {
-          display: grid; grid-template-columns: 18px 42px 1fr auto;
-          align-items: center; gap: 8px; margin-bottom: 7px;
-        }
-        .row img { width: 18px; height: 18px; image-rendering: pixelated; }
-        .chip { width: 10px; height: 10px; border-radius: 2px; margin: 0 4px; }
-        .label { color: ${TEXT}; font-size: 12px; letter-spacing: .06em; }
-        .track { background: #241d15; height: 9px; border-radius: 2px; overflow: hidden; }
-        .fill { height: 100%; border-radius: 2px; transition: width .4s ease; }
-        .amount { color: ${TEXT}; font-size: 12px; font-variant-numeric: tabular-nums; }
-        .foot {
-          display: flex; align-items: baseline; gap: 10px;
-          margin-top: 12px; color: ${DIM}; font-size: 11px;
-          font-variant-numeric: tabular-nums;
-        }
-        .foot .next { margin-left: auto; }
-        .bar { margin-top: 6px; }
-        .quiet { color: ${DIM}; font-size: 13px; padding: 6px 0 2px; }
-        .vitals { margin-top: 12px; }
-        .vital {
-          display: grid; grid-template-columns: 42px 1fr;
-          align-items: center; gap: 8px; margin-top: 6px;
+          font-size: 6px;
+          font-weight: 700;
+          /* The panel has no antialiasing and neither should this. */
+          shape-rendering: crispEdges;
         }
         .err { padding: 16px; color: var(--error-color, #db4437); }
       </style>
-      <ha-card><div class="panel"></div></ha-card>`;
-    this._panel = this.shadowRoot.querySelector(".panel");
+      <ha-card><div class="host"></div></ha-card>`;
+    this._host = this.shadowRoot.querySelector(".host");
     this._built = true;
   }
 
@@ -156,102 +133,126 @@ class OsrsActivityCard extends HTMLElement {
 
     const state = this._hass.states[this._config.entity];
     if (!state) {
-      this._panel.innerHTML =
-        `<div class="err">${esc(this._config.entity)} not found</div>`;
+      this._host.innerHTML = `<div class="err">${esc(
+        this._config.entity,
+      )} not found</div>`;
       return;
     }
-
     const a = state.attributes;
     if (a.window_skills === undefined) {
-      // Almost certainly the "XP gained" sensor, which is one line away in the
-      // picker and holds a total rather than the whole picture.
-      this._panel.innerHTML = `<div class="err">${esc(
+      this._host.innerHTML = `<div class="err">${esc(
         this._config.entity,
       )} is not the Activity sensor</div>`;
       return;
     }
+
     const rows = a.skills || [];
-    const idle = Boolean(a.idle);
+    let body;
+    if (!rows.length) body = this._standby(a);
+    else if (a.combat && a.style) body = this._combat(a);
+    else if (rows.length === 1) body = this._single(a, rows[0]);
+    else body = this._bars(a, rows);
 
-    if (!rows.length) {
-      // Logged in and not training is the panel's standby screen: name, health
-      // and prayer. Logged out is a quiet line, because there is nothing to say.
-      const online = Boolean(a.online);
-      this._panel.innerHTML = `
-        <div class="head">
-          <span class="style">${esc(a.account || "OSRS")}</span>
-          ${
-            online
-              ? `<span class="gained">${idle ? "" : "ONLINE"}</span>`
-              : '<span class="gained">OFFLINE</span>'
-          }
-          ${idle ? '<span class="badge">IDLE</span>' : ""}
-        </div>
-        <div class="rule"></div>
-        ${
-          online
-            ? this._vitals() || '<div class="quiet">Not training.</div>'
-            : '<div class="quiet">Logged out.</div>'
-        }`;
-      return;
-    }
-
-    const top = a.top || rows[0];
-    // The same three-way choice the blueprint makes.
-    const combat = a.combat && a.style;
-    const heading = combat ? a.style : top.key;
-    // The panel puts the level beside the skill name on the single-skill
-    // screen and the slayer kill count beside the heading in combat. Same
-    // information, same corner.
-    const level = combat || rows.length > 1 ? "" : top.level;
-    const kills = combat ? Number(a.slayer_kills) || 0 : 0;
-    const perHour = Math.round((a.per_hour || 0) / 100) / 10;
-
-    this._panel.innerHTML = `
-      <div class="head">
-        <span class="style">${esc(heading)}</span>
-        ${kills ? `<span class="level">x${kills}</span>` : ""}
-        ${level ? `<span class="level">${esc(level)}</span>` : ""}
-        <span class="gained">+${esc(a.total_gained_short || "0")} XP</span>
-      </div>
-      <div class="rule"></div>
-      ${rows.slice(0, 5).map((row) => this._row(row, rows.length > 1)).join("")}
-      <div class="bar">
-        <div class="track">
-          <div class="fill" style="width:${Number(top.pct) || 0}%;
-               background:${esc(top.color_hex || GOLD)}"></div>
-        </div>
-      </div>
-      <div class="foot">
-        <span>${esc(top.xp_short || "")} XP</span>
-        ${idle ? '<span class="badge">IDLE</span>' : `<span>${perHour}k/h</span>`}
-        ${
-          top.next_level
-            ? `<span class="next">${esc(top.to_go_short)} to L${esc(top.next_level)}</span>`
-            : '<span class="next">200m</span>'
-        }
-      </div>
-      ${combat ? this._vitals() : ""}`;
+    this._host.innerHTML = `
+      <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+        ${rect(0, 0, 64, 64, BG)}
+        ${this._strip(a)}
+        ${body}
+      </svg>`;
   }
 
-  _row(row, showBar) {
-    const colour = esc(row.color_hex || GOLD);
-    // The bar is `share`, which the integration already scaled against the
-    // biggest gainer in focus. A single skill has nothing to compare against,
-    // so it gets its level progress instead of a bar that is always full.
-    const width = showBar ? Number(row.share) || 1 : Number(row.pct) || 0;
-    const icon = row.icon_url
-      ? `<img src="${esc(row.icon_url)}" alt="">`
-      : `<div class="chip" style="background:${colour}"></div>`;
-    return `
-      <div class="row">
-        ${icon}
-        <span class="label">${esc(row.label)}</span>
-        <div class="track">
-          <div class="fill" style="width:${width}%; background:${colour}"></div>
-        </div>
-        <span class="amount">${esc(row.gained_short)}</span>
-      </div>`;
+  /** The 2px health strip along the top of every screen. */
+  _strip(a) {
+    const hp = a.health_pct ?? -1;
+    if (hp < 0) return "";
+    return rect(0, 0, clamp(Math.round(hp * 0.64), 1, 64), 2, hpColour(hp));
+  }
+
+  _rule() {
+    return rect(0, 13, 64, 1, RULE);
+  }
+
+  /** The idle plate: on the panel IDLE replaces the rate, not the XP. */
+  _rate(a, y, perHourText) {
+    const idle = Boolean(a.idle);
+    return (
+      rect(0, 27, 36, 10, idle ? IDLE_BG : BG) +
+      text(2, y, idle ? "IDLE" : perHourText, idle ? IDLE_FG : TEXT)
+    );
+  }
+
+  _vitals(a) {
+    const hp = a.health_pct ?? -1;
+    const pray = a.prayer_pct ?? -1;
+    return (
+      text(2, 45, "HP", TEXT) +
+      bar(22, 44, 40, 7, hp < 0 ? 0 : hp, hpColour(hp)) +
+      text(2, 55, "PRAY", TEXT) +
+      bar(22, 54, 40, 7, pray < 0 ? 0 : pray, pray < 0 ? BG : PRAYER)
+    );
+  }
+
+  _combat(a) {
+    const kills = Number(a.slayer_kills) || 0;
+    const perHour = `${Math.round((a.per_hour || 0) / 100) / 10}k/HR`;
+    return (
+      text(2, 5, a.style, ACCENT) +
+      text(62, 5, kills ? `x${kills}` : "", GREY, "end") +
+      this._rule() +
+      image(a.style_icon_url, 38, 16, 25) +
+      text(2, 19, `+${a.total_gained_short || "0"} XP`, GOLD) +
+      this._rate(a, 30, perHour) +
+      this._vitals(a)
+    );
+  }
+
+  _single(a, row) {
+    const idle = Boolean(a.idle);
+    const colour = row.color_hex || ACCENT;
+    return (
+      text(2, 5, String(row.key).toUpperCase(), idle ? "#786950" : colour) +
+      text(62, 5, row.level, TEXT, "end") +
+      this._rule() +
+      image(row.icon_url, 38, 16, 25) +
+      text(2, 18, `+${row.gained_short || "0"} XP`, GOLD) +
+      this._rate(a, 29, `${row.per_hour_short || "0"}/HR`) +
+      bar(2, 47, 60, 6, Number(row.pct) || 0, colour) +
+      text(2, 56, row.xp_short, TEXT) +
+      text(62, 56, row.next_level ? `L${row.next_level}` : "", DIM, "end")
+    );
+  }
+
+  _bars(a, rows) {
+    const active = Number(a.active) || rows.length;
+    const head = a.idle ? "IDLE" : `XP${active > 5 ? ` +${active - 5}` : ""}`;
+    let out =
+      text(2, 5, head, a.idle ? IDLE_BG : ACCENT) +
+      text(62, 5, `+${a.total_gained_short || "0"}`, TEXT, "end") +
+      this._rule();
+    // Five rows nine pixels apart, which is what fits under the rule.
+    rows.slice(0, 5).forEach((row, i) => {
+      const y = 17 + i * 9;
+      out +=
+        text(2, y, row.label, i === 0 ? ACCENT : TEXT) +
+        bar(20, y - 1, 20, 7, Number(row.share) || 1, row.color_hex || ACCENT) +
+        text(62, y, row.gained_short, i === 0 ? TEXT : DIM, "end");
+    });
+    return out;
+  }
+
+  _standby(a) {
+    const online = Boolean(a.online);
+    return (
+      text(2, 5, String(a.account || "OSRS").toUpperCase(), ACCENT) +
+      this._rule() +
+      text(
+        2,
+        22,
+        online ? (a.idle ? "IDLE" : "ONLINE") : "OFFLINE",
+        a.idle ? IDLE_BG : online ? PRAYER : DIM,
+      ) +
+      (online ? this._vitals(a) : "")
+    );
   }
 }
 
@@ -304,7 +305,7 @@ if (!customElements.get("osrs-activity-card")) {
   window.customCards.push({
     type: "osrs-activity-card",
     name: "OSRS Activity",
-    description: "What you are training, the way the Pixoo shows it.",
+    description: "The Pixoo screen, on your dashboard.",
     preview: true,
     documentationURL: "https://github.com/Pondake/osrs-activity",
   });
