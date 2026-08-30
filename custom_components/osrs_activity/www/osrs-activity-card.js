@@ -39,14 +39,20 @@ const esc = (value) =>
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
-/** A line of panel text. `anchor` "end" mirrors the device's align: right. */
+/** A line of panel text. `anchor` "end" mirrors the device's align: right.
+ *
+ * lengthAdjust is "spacing", not "spacingAndGlyphs": the width of the line has
+ * to match the panel's 4px cells, but stretching the letterforms to get there
+ * is what made this look wrong. Monospace at this size advances about 3.6px,
+ * so the difference is taken out of the gaps and the glyphs keep their shape.
+ */
 function text(x, y, body, colour, anchor) {
   const content = String(body ?? "");
   if (!content) return "";
   const length = content.length * CELL;
   return `<text x="${anchor === "end" ? x - length : x}" y="${y + BASELINE}"
     fill="${colour}" textLength="${length}"
-    lengthAdjust="spacingAndGlyphs">${esc(content)}</text>`;
+    lengthAdjust="spacing">${esc(content)}</text>`;
 }
 
 const rect = (x, y, w, h, colour) =>
@@ -113,12 +119,14 @@ class OsrsActivityCard extends HTMLElement {
           /* Square, because the thing it mirrors is square. */
           aspect-ratio: 1 / 1;
         }
+        /* Blocks stay hard-edged like the LEDs they stand for; letters do
+           not, because crisp-edged text at this size is just jagged. */
+        rect { shape-rendering: crispEdges; }
         text {
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-          font-size: 6px;
-          font-weight: 700;
-          /* The panel has no antialiasing and neither should this. */
-          shape-rendering: crispEdges;
+          font-size: 5.5px;
+          font-weight: 600;
+          letter-spacing: 0;
         }
         .err { padding: 16px; color: var(--error-color, #db4437); }
       </style>
