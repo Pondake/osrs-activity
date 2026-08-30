@@ -45,6 +45,21 @@ EVENT_IDLE = "runelite_idle_notify"
 # flap the sensor.
 PING_TIMEOUT = 180
 
+# Health and prayer come from the RuneLite integration too, and this already
+# knows which player it is following -- so it looks them up rather than asking
+# for four more entity pickers on every display.
+#
+# Read at publish time and deliberately NOT part of the change signature:
+# health moves on almost every tick of a fight, and letting that force a
+# publish would mean a redraw per hit. It rides along with the next publish
+# instead, which during combat is a second or two away anyway.
+VITALS = {
+    "health": "{prefix}_health",
+    "health_max": "{prefix}_skill_hitpoints",
+    "prayer": "{prefix}_prayer",
+    "prayer_max": "{prefix}_skill_prayer",
+}
+
 MAX_XP = 200_000_000
 MAX_LEVEL = 126
 

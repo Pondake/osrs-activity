@@ -207,8 +207,9 @@ against an absolute figure. That makes a combat sitting read as a ratio
 (2:1:1 strength/attack/hitpoints) and makes the same scale work for Wintertodt
 and for Zulrah without a special case for either.
 
-Health and prayer are optional inputs; leave them empty and those bars are
-simply not drawn. Background and accent are colour pickers.
+Health and prayer need no setting up: the integration looks up those sensors
+for the player it is already following, and both the card and the panel read
+them from the same place. Background and accent are colour pickers.
 
 That last one is a switch. On, the panel says something between sessions
 instead of going dark. Off, nothing is drawn at all while you are not training.
@@ -216,9 +217,7 @@ instead of going dark. Off, nothing is drawn at all while you are not training.
 **If something else already draws to the same Pixoo,** the two will fight and
 whichever pushed last wins. Use **Only draw when** for that: it takes any
 condition, so if you have an `input_select` deciding what the panel shows,
-require it to be on the value that means "OSRS". The card takes the same
-optional health and prayer entities as the blueprint, so it shows the same
-four screens.
+require it to be on the value that means "OSRS".
 
 > **Before you raise the refresh rate:** [docs/pixoo.md](docs/pixoo.md) has the
 > measured limits of the device. Short version — it does not crash under load,

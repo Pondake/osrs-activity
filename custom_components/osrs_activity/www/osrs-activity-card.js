@@ -50,20 +50,12 @@ class OsrsActivityCard extends HTMLElement {
     this._built = false;
   }
 
-  /** Percent full for a vitals pair, or -1 when it is not configured. */
-  _vital(currentKey, skillKey) {
-    const current = this._config[currentKey];
-    const skill = this._config[skillKey];
-    if (!current || !skill) return -1;
-    const now = Number(this._hass.states[current]?.state);
-    const max = Number(this._hass.states[skill]?.attributes?.level);
-    if (!Number.isFinite(now) || !Number.isFinite(max) || max <= 0) return -1;
-    return Math.max(0, Math.min(100, Math.round((now / max) * 100)));
-  }
-
   _vitals() {
-    const hp = this._vital("health", "hitpoints_skill");
-    const pray = this._vital("prayer", "prayer_skill");
+    // Resolved by the integration, which already knows the player. Nothing to
+    // configure, and nothing to keep in step with the blueprint.
+    const a = this._hass.states[this._config.entity]?.attributes || {};
+    const hp = a.health_pct ?? -1;
+    const pray = a.prayer_pct ?? -1;
     if (hp < 0 && pray < 0) return "";
     // Same thresholds as the panel: green above half, amber above a quarter.
     const hpColour = hp > 50 ? "#00dc3c" : hp > 25 ? "#ffb400" : "#ff2828";
@@ -279,14 +271,7 @@ class OsrsActivityCardEditor extends HTMLElement {
     if (!this._form) {
       this._form = document.createElement("ha-form");
       this._form.computeLabel = (schema) =>
-        ({
-          entity: "Activity sensor",
-          vitals: "Health and prayer",
-          health: "Current hitpoints",
-          hitpoints_skill: "Hitpoints skill",
-          prayer: "Current prayer points",
-          prayer_skill: "Prayer skill",
-        })[schema.name] || schema.name;
+        schema.name === "entity" ? "Activity sensor" : schema.name;
       this._form.addEventListener("value-changed", (event) => {
         this.dispatchEvent(
           new CustomEvent("config-changed", {
@@ -300,24 +285,11 @@ class OsrsActivityCardEditor extends HTMLElement {
     }
     this._form.hass = this._hass;
     this._form.data = this._config;
-    const runelite = { entity: { integration: "runelite", domain: "sensor" } };
     this._form.schema = [
       {
         name: "entity",
         required: true,
         selector: { entity: { integration: "osrs_activity", domain: "sensor" } },
-      },
-      {
-        name: "vitals",
-        type: "expandable",
-        // Optional, exactly as in the blueprint: leave them empty and the bars
-        // are not drawn.
-        schema: [
-          { name: "health", selector: runelite },
-          { name: "hitpoints_skill", selector: runelite },
-          { name: "prayer", selector: runelite },
-          { name: "prayer_skill", selector: runelite },
-        ],
       },
     ];
   }

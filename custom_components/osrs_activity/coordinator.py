@@ -27,6 +27,7 @@ from .const import (
     RUNELITE_DOMAIN,
     SIGNAL_UPDATE,
     TICK_SECONDS,
+    VITALS,
 )
 from .engine import ActivityEngine
 
@@ -74,6 +75,7 @@ class ActivityCoordinator:
         )
         self._entities: dict[str, str] = {}  # entity_id -> skill
         self._status_entity: str | None = None
+        self._vitals: dict[str, str] = {}  # role -> entity_id
         self._unsub_states = None
         self._unsubs: list = []
         self._icons: set[str] = set()
@@ -123,18 +125,28 @@ class ActivityCoordinator:
         registry = er.async_get(self.hass)
         found: dict[str, str] = {}
         status = None
+        prefix = f"{RUNELITE_DOMAIN}_{sanitize(self.username)}"
+        wanted = {
+            template.format(prefix=prefix): role
+            for role, template in VITALS.items()
+        }
+        vitals: dict[str, str] = {}
         for entry in registry.entities.values():
             if entry.platform != RUNELITE_DOMAIN or not entry.unique_id:
                 continue
             if entry.unique_id == self._status_uid:
                 status = entry.entity_id
                 continue
+            if entry.unique_id in wanted:
+                vitals[wanted[entry.unique_id]] = entry.entity_id
+                # skill_hitpoints is also a skill, so no continue here.
             if not entry.unique_id.startswith(self._prefix):
                 continue
             skill = entry.unique_id[len(self._prefix):]
             if skill and skill != SKILL_TOTAL:
                 found[entry.entity_id] = skill
 
+        self._vitals = vitals
         if found == self._entities and status == self._status_entity:
             return
 
@@ -263,6 +275,8 @@ class ActivityCoordinator:
         data["style_icon_url"] = self._icon_url(data["style_key"])
         data["account"] = self.username
         data["online"], data["last_ping"] = self._liveness()
+        data["health_pct"] = self._vital("health", "health_max")
+        data["prayer_pct"] = self._vital("prayer", "prayer_max")
 
     def _resolve(self, skill: str) -> str | None:
         """The icon for a skill, or the transparent stand-in, or nothing.
@@ -285,6 +299,29 @@ class ActivityCoordinator:
         name = self._resolve(skill)
         return f"/local/{ICON_DIR}/{name}" if name else None
 
+
+    def _vital(self, now_role: str, max_role: str) -> int | None:
+        """Percent full, or None when this player has no such sensor.
+
+        The maximum is the skill LEVEL, not its XP -- 99 hitpoints means 99
+        health, and the skill sensor carries the level as an attribute.
+        """
+        now_id = self._vitals.get(now_role)
+        max_id = self._vitals.get(max_role)
+        if not now_id or not max_id:
+            return None
+        current = self.hass.states.get(now_id)
+        ceiling = self.hass.states.get(max_id)
+        if current is None or ceiling is None:
+            return None
+        try:
+            value = float(current.state)
+            top = float(ceiling.attributes.get("level"))
+        except (TypeError, ValueError):
+            return None
+        if top <= 0:
+            return None
+        return max(0, min(100, round(value / top * 100)))
 
     def _liveness(self) -> tuple[bool, str | None]:
         """Whether the plugin is still pushing, and when it last did."""

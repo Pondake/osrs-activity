@@ -41,43 +41,6 @@ blueprint:
         entity:
           integration: osrs_activity
           domain: sensor
-    vitals:
-      name: Health and prayer
-      icon: mdi:heart
-      collapsed: true
-      description: >-
-        Optional. Fills the 2px strip along the top and the two bars on the
-        combat screen. Leave empty and those are simply not drawn.
-      input:
-        health:
-          name: Current hitpoints
-          default: ""
-          selector:
-            entity:
-              integration: runelite
-              domain: sensor
-        hitpoints_skill:
-          name: Hitpoints skill
-          description: Used for your maximum, which is the level rather than the XP.
-          default: ""
-          selector:
-            entity:
-              integration: runelite
-              domain: sensor
-        prayer:
-          name: Current prayer points
-          default: ""
-          selector:
-            entity:
-              integration: runelite
-              domain: sensor
-        prayer_skill:
-          name: Prayer skill
-          default: ""
-          selector:
-            entity:
-              integration: runelite
-              domain: sensor
     only_when:
       name: Only draw when
       description: >-
@@ -147,10 +110,6 @@ max_exceeded: silent
 
 variables:
   activity: !input activity
-  health: !input health
-  hitpoints_skill: !input hitpoints_skill
-  prayer: !input prayer
-  prayer_skill: !input prayer_skill
   bg: !input background
   accent: !input accent
   floor: !input min_interval
@@ -167,21 +126,11 @@ variables:
   online: "{{ state_attr(activity, 'online') | default(false, true) }}"
   account: "{{ state_attr(activity, 'account') | default('OSRS', true) }}"
 
-  # -1 means "not configured", which draws in the background colour and so
-  # draws nothing. Kept out of the components themselves because the same
-  # number is needed three times per screen.
-  hp_pct: >-
-    {% if health and hitpoints_skill %}
-      {{ [ (states(health) | float(0) /
-            (state_attr(hitpoints_skill, 'level') | float(99))) * 100,
-           100 ] | min | round | int }}
-    {% else %}-1{% endif %}
-  pray_pct: >-
-    {% if prayer and prayer_skill %}
-      {{ [ (states(prayer) | float(0) /
-            (state_attr(prayer_skill, 'level') | float(99))) * 100,
-           100 ] | min | round | int }}
-    {% else %}-1{% endif %}
+  # The integration resolves health and prayer itself -- it already knows which
+  # player this is. -1 means it found no such sensor, which draws in the
+  # background colour and so draws nothing.
+  hp_pct: "{{ state_attr(activity, 'health_pct') | int(-1) }}"
+  pray_pct: "{{ state_attr(activity, 'prayer_pct') | int(-1) }}"
   hp_color: >-
     {% set p = hp_pct | int(-1) %}
     {% if p < 0 %}{{ bg }}{% elif p > 50 %}[0,220,60]
