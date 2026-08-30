@@ -52,6 +52,27 @@ see this failure**. Two consecutive `Draw/GetHttpGifId` calls with an unchanged
 Recovery is `Device/SysReboot` over HTTP; it comes back in about 20 seconds with
 `PicId: 1`.
 
+## Reboots happen on their own
+
+Twice in sixteen minutes on 2026-08-30, while something was pushing at one page
+every six to ten seconds — nowhere near the rate that breaks it. Both times the
+entity went `unavailable` and was back about 25 seconds later without anyone
+touching it:
+
+```
+12:48:41  unavailable      13:04:54  unavailable
+12:49:07  on   (26 s)      13:05:15  on   (21 s)
+```
+
+In the log it is a connect timeout, not a refusal to draw. The library that
+talks to the device says the same thing plainly: *"sometime the Pixoo will
+reboot when sending a command. No way to fix this at the moment."*
+
+Which means anything that draws to one should survive it. In an automation that
+is `continue_on_error: true` on the service call: a reboot then costs one
+frame, instead of a stack trace and an aborted run that leaves the rest of the
+sequence undone.
+
 ## What that means for your intervals
 
 Rate limiting is a *safety* limit, so pick a number well under the break and

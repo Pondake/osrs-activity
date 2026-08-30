@@ -194,6 +194,10 @@ actions:
       - conditions: "{{ combat }}"
         sequence:
           - action: divoom_pixoo.show_message
+            # The Pixoo reboots by itself now and then -- it refuses the
+            # connection for about half a minute and comes back on its own.
+            # A missed frame is not worth a stack trace or an aborted run.
+            continue_on_error: true
             target:
               entity_id: !input panel
             data:
@@ -282,6 +286,10 @@ actions:
       - conditions: "{{ focus_n == 1 }}"
         sequence:
           - action: divoom_pixoo.show_message
+            # The Pixoo reboots by itself now and then -- it refuses the
+            # connection for about half a minute and comes back on its own.
+            # A missed frame is not worth a stack trace or an aborted run.
+            continue_on_error: true
             target:
               entity_id: !input panel
             data:
@@ -361,6 +369,10 @@ actions:
       - conditions: "{{ active < 1 }}"
         sequence:
           - action: divoom_pixoo.show_message
+            # The Pixoo reboots by itself now and then -- it refuses the
+            # connection for about half a minute and comes back on its own.
+            # A missed frame is not worth a stack trace or an aborted run.
+            continue_on_error: true
             target:
               entity_id: !input panel
             data:
@@ -429,6 +441,7 @@ actions:
     # "+2" when there are more.
     default:
       - action: divoom_pixoo.show_message
+        continue_on_error: true
         target:
           entity_id: !input panel
         data:
