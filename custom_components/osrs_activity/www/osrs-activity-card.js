@@ -24,11 +24,42 @@ const GOLD = "#ffdc00";
 const PRAYER = "#8cc8ff";
 const GREY = "#969ba0";
 
-// PICO_8 is 4px per character and about 5px tall, and the panel positions text
-// by its top-left corner. SVG positions it by the baseline, hence the offset;
-// textLength pins each glyph into the same 4px cell the device uses.
+// A 3x5 pixel font in a 4px cell, which is what PICO_8 is on the device.
+//
+// Drawn rather than typeset. Any real font rendered into a 64px viewBox and
+// then blown up to card size is a smooth modern typeface pretending to be a
+// panel; this is the panel. It also removes the last thing that depended on
+// which monospace font the viewer happens to have.
+//
+// The device's draw_text uppercases everything, so this only carries capitals.
+const GLYPHS = {
+  " ": "...:...:...:...:...",
+  "0": "###:#.#:#.#:#.#:###", "1": ".#.:##.:.#.:.#.:###",
+  "2": "###:..#:###:#..:###", "3": "###:..#:###:..#:###",
+  "4": "#.#:#.#:###:..#:..#", "5": "###:#..:###:..#:###",
+  "6": "###:#..:###:#.#:###", "7": "###:..#:..#:..#:..#",
+  "8": "###:#.#:###:#.#:###", "9": "###:#.#:###:..#:###",
+  A: "###:#.#:###:#.#:#.#", B: "##.:#.#:##.:#.#:##.",
+  C: "###:#..:#..:#..:###", D: "##.:#.#:#.#:#.#:##.",
+  E: "###:#..:##.:#..:###", F: "###:#..:##.:#..:#..",
+  G: "###:#..:#.#:#.#:###", H: "#.#:#.#:###:#.#:#.#",
+  I: "###:.#.:.#.:.#.:###", J: "..#:..#:..#:#.#:###",
+  K: "#.#:#.#:##.:#.#:#.#", L: "#..:#..:#..:#..:###",
+  M: "#.#:###:###:#.#:#.#", N: "##.:#.#:#.#:#.#:#.#",
+  O: "###:#.#:#.#:#.#:###", P: "###:#.#:###:#..:#..",
+  Q: "###:#.#:#.#:###:..#", R: "###:#.#:##.:#.#:#.#",
+  S: "###:#..:###:..#:###", T: "###:.#.:.#.:.#.:.#.",
+  U: "#.#:#.#:#.#:#.#:###", V: "#.#:#.#:#.#:#.#:.#.",
+  W: "#.#:#.#:###:###:#.#", X: "#.#:#.#:.#.:#.#:#.#",
+  Y: "#.#:#.#:###:.#.:.#.", Z: "###:..#:.#.:#..:###",
+  "+": "...:.#.:###:.#.:...", "-": "...:...:###:...:...",
+  ".": "...:...:...:...:.#.", ",": "...:...:...:.#.:#..",
+  "/": "..#:..#:.#.:#..:#..", "'": ".#.:.#.:...:...:...",
+  ":": "...:.#.:...:.#.:...", "%": "#.#:..#:.#.:#..:#.#",
+  "!": ".#.:.#.:.#.:...:.#.", "?": "###:..#:.#.:...:.#.",
+};
+const GLYPH_W = 3;
 const CELL = 4;
-const BASELINE = 5;
 
 const esc = (value) =>
   String(value ?? "").replace(
@@ -39,20 +70,41 @@ const esc = (value) =>
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
-/** A line of panel text. `anchor` "end" mirrors the device's align: right.
+/** A line of panel text, drawn pixel by pixel.
  *
- * lengthAdjust is "spacing", not "spacingAndGlyphs": the width of the line has
- * to match the panel's 4px cells, but stretching the letterforms to get there
- * is what made this look wrong. Monospace at this size advances about 3.6px,
- * so the difference is taken out of the gaps and the glyphs keep their shape.
+ * `x, y` is the top-left corner, as it is on the device. `anchor` "end" puts
+ * the right edge at x, mirroring the device's align: right. Runs of lit pixels
+ * in a row become one rect, which keeps a full screen to a few hundred of them
+ * rather than a thousand.
  */
 function text(x, y, body, colour, anchor) {
-  const content = String(body ?? "");
+  const content = String(body ?? "").toUpperCase();
   if (!content) return "";
-  const length = content.length * CELL;
-  return `<text x="${anchor === "end" ? x - length : x}" y="${y + BASELINE}"
-    fill="${colour}" textLength="${length}"
-    lengthAdjust="spacing">${esc(content)}</text>`;
+  // Last character carries no trailing gap, hence the -1.
+  const width = content.length * CELL - 1;
+  let left = anchor === "end" ? x - width : x;
+  let out = "";
+
+  for (const character of content) {
+    const glyph = GLYPHS[character];
+    if (glyph) {
+      glyph.split(":").forEach((row, dy) => {
+        let run = 0;
+        for (let dx = 0; dx <= GLYPH_W; dx += 1) {
+          if (row[dx] === "#") {
+            run += 1;
+            continue;
+          }
+          if (run) {
+            out += rect(left + dx - run, y + dy, run, 1, colour);
+            run = 0;
+          }
+        }
+      });
+    }
+    left += CELL;
+  }
+  return out;
 }
 
 const rect = (x, y, w, h, colour) =>
@@ -119,15 +171,9 @@ class OsrsActivityCard extends HTMLElement {
           /* Square, because the thing it mirrors is square. */
           aspect-ratio: 1 / 1;
         }
-        /* Blocks stay hard-edged like the LEDs they stand for; letters do
-           not, because crisp-edged text at this size is just jagged. */
+        /* Every mark on this card is a rectangle, letters included, so
+           nothing here should be smoothed. */
         rect { shape-rendering: crispEdges; }
-        text {
-          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-          font-size: 5.5px;
-          font-weight: 600;
-          letter-spacing: 0;
-        }
         .err { padding: 16px; color: var(--error-color, #db4437); }
       </style>
       <ha-card><div class="host"></div></ha-card>`;
