@@ -229,6 +229,21 @@ whichever pushed last wins. Use **Only draw when** for that: it takes any
 condition, so if you have an `input_select` deciding what the panel shows,
 require it to be on the value that means "OSRS".
 
+The same input handles a one-shot alert, not just a standing choice: a loot or
+collection-log notification that flashes the panel for a few seconds loses to
+this blueprint the moment the next tick redraws over it, because nothing here
+knows the alert is mid-run. If that alert is its own script, add a condition
+that it is not currently on:
+
+```yaml
+condition: state
+entity_id: script.your_alert_script
+state: "off"
+```
+
+This blueprint's own tick will pick the screen back up within a couple of
+seconds of the alert finishing, so nothing has to hand control back.
+
 > **Before you raise the refresh rate:** [docs/pixoo.md](docs/pixoo.md) has the
 > measured limits of the device. Short version — it does not crash under load,
 > it *freezes*, and it does so silently: it keeps answering HTTP with
