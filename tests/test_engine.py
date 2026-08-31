@@ -226,6 +226,20 @@ def test_genuinely_stopping_does_not_strand_slayer_alone_in_focus():
     assert snapshot["style_key"] == "slayer"
 
 
+def test_hitpoints_alone_does_not_count_as_still_fighting():
+    """Hitpoints and prayer XP can arrive without an attack (a poison tick,
+    praying at an altar) -- a stray one of those should not extend slayer's
+    grace period the way an actual attack does."""
+    eng = make(window_minutes=5, focus_seconds=25)
+    eng.record("strength", 1000, 900, T0)
+    eng.record("slayer", 500, 400, T0)
+
+    later = T0 + timedelta(seconds=60)
+    eng.record("hitpoints", 100, 90, later)  # ticks, but no style skill did
+    snapshot = eng.snapshot(later)
+    assert "slayer" not in {row["key"] for row in snapshot["skills"]}
+
+
 def test_every_way_of_saying_there_is_no_task():
     for absent in ("None", "null", "", "  ", "unknown", "unavailable", None, 0):
         assert engine.task_name(absent) is None, absent

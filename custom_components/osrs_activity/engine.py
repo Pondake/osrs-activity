@@ -382,10 +382,18 @@ class ActivityEngine:
         # evidence of every OTHER combat skill" means slayer only outlasts
         # focus_seconds while that evidence exists, and ages out with
         # everything else the moment it does not.
+        # "Still fighting" means a style-driving skill landed recently --
+        # attack/strength/defence/ranged/magic, the same set _style() itself
+        # treats as evidence of an actual attack (see NOT_A_STYLE). Hitpoints
+        # and prayer are excluded on purpose even though they are combat
+        # skills: in a real fight they move on the same hit as a style skill
+        # anyway, so they add nothing here, and unlike a style skill they CAN
+        # tick from something that is not fighting at all (burying bones,
+        # praying at an altar) -- evidence this check should not accept.
         still_fighting = any(
             row["idle"] <= self.focus_seconds
             for row in rows
-            if row["key"] in COMBAT_SKILLS and row["key"] != "slayer"
+            if row["key"] in COMBAT_SKILLS and row["key"] not in NOT_A_STYLE
         )
         slayer_threshold = (
             self.window.total_seconds() if still_fighting else self.focus_seconds
