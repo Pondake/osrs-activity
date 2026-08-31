@@ -367,20 +367,34 @@ class ActivityEngine:
         # What is on screen NOW. If that falls empty during a short pause, show
         # the whole window again rather than nothing.
         #
-        # Slayer gets the session window's own length here, not focus_seconds.
-        # Its XP lands once per kill rather than once per hit, so a target that
-        # takes a while to put down can go longer between gains than
-        # focus_seconds allows without the player having switched to anything
-        # else -- which used to drop the task out of view and show plain melee
-        # mid-kill. The session window is already the threshold for "this
-        # counter is still the same sitting", so reusing it here means slayer
-        # never outlives its own counter, and needs no threshold of its own.
-        slayer_grace = self.window.total_seconds()
+        # Slayer gets the session window's own length here instead of
+        # focus_seconds, but ONLY while some other combat skill is still fresh
+        # under the ordinary threshold. Its XP lands once per kill rather than
+        # once per hit, so a target that takes a while to put down can go
+        # longer between gains than focus_seconds allows without the player
+        # having switched to anything else -- which used to drop the task out
+        # of view mid-kill. Extending it unconditionally overshot: once the
+        # player actually stops (idle, logged off to bank, whatever), melee
+        # ages out at the normal 25s while slayer -- graced all the way to the
+        # session window -- was left alone in focus, and a single leftover
+        # skill reads as "training slayer" rather than as the task screen or
+        # nothing. Gating the grace on "still fighting something, by the
+        # evidence of every OTHER combat skill" means slayer only outlasts
+        # focus_seconds while that evidence exists, and ages out with
+        # everything else the moment it does not.
+        still_fighting = any(
+            row["idle"] <= self.focus_seconds
+            for row in rows
+            if row["key"] in COMBAT_SKILLS and row["key"] != "slayer"
+        )
+        slayer_threshold = (
+            self.window.total_seconds() if still_fighting else self.focus_seconds
+        )
         focus = [
             row
             for row in rows
             if row["idle"]
-            <= (slayer_grace if row["key"] == "slayer" else self.focus_seconds)
+            <= (slayer_threshold if row["key"] == "slayer" else self.focus_seconds)
         ] or rows
 
         top = focus[0] if focus else {}

@@ -207,6 +207,25 @@ def test_a_slow_kill_still_expires_past_the_session_window():
     assert snapshot["style"] != "Slayin'"
 
 
+def test_genuinely_stopping_does_not_strand_slayer_alone_in_focus():
+    """The bug report: task done, went idle, and the screen fell back to a
+    lone "SLAYER" skill view instead of the task screen or the same
+    whole-window fallback everything else gets. Slayer's grace period is
+    only meant to cover a slow KILL -- borrowed from evidence that some
+    other combat skill is still landing hits. With nothing landing at all,
+    it must age out together with melee, not outlive it alone."""
+    eng = make(window_minutes=5, focus_seconds=25)
+    eng.record("strength", 1000, 900, T0)
+    eng.record("slayer", 500, 400, T0)
+
+    later = T0 + timedelta(seconds=60)  # past focus_seconds; nothing since
+    snapshot = eng.snapshot(later)
+    keys = {row["key"] for row in snapshot["skills"]}
+    assert keys == {"strength", "slayer"}  # fell back together, not solo
+    assert snapshot["combat"] is True
+    assert snapshot["style_key"] == "slayer"
+
+
 def test_every_way_of_saying_there_is_no_task():
     for absent in ("None", "null", "", "  ", "unknown", "unavailable", None, 0):
         assert engine.task_name(absent) is None, absent
