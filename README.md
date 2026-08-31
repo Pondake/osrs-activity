@@ -1,6 +1,4 @@
-<img src="assets/icon-256.png" alt="" width="96" align="right">
-
-# OSRS Activity
+# <img src="assets/icon-256.png" alt="" width="48" align="absmiddle"> OSRS Activity
 
 [![HACS: custom repository](https://img.shields.io/badge/HACS-custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories/)
 [![Validate](https://github.com/Pondake/osrs-activity/actions/workflows/validate.yml/badge.svg)](https://github.com/Pondake/osrs-activity/actions/workflows/validate.yml)
