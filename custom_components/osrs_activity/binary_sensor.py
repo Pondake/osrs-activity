@@ -27,13 +27,15 @@ async def async_setup_entry(
 class IdleBinarySensor(OsrsActivityEntity, BinarySensorEntity):
     """On when the player is standing around doing nothing.
 
-    Turned on by the plugin's idle event and turned off by the next XP gain.
-    How long you have to stand still first is the Idle delay in the RuneLite
-    plugin's own panel; this integration keeps no threshold of its own, so
-    there is only one place to change it.
+    Turned on and off by the plugin's two idle events. How long you have to
+    stand still first is the Idle delay in the RuneLite plugin's own panel;
+    this integration keeps no threshold of its own, so there is only one place
+    to change it.
 
-    That also means the "not idle any more" edge is only as fast as your next
-    XP drop, which on a slow skill can be a while.
+    Turning off used to wait for the next XP gain, which meant this stayed on
+    through banking, walking and dialogue -- none of which grant XP. The plugin
+    now reports that edge itself. The XP fallback is still there underneath for
+    a client that does not send it.
     """
 
     _attr_icon = "mdi:sleep"
@@ -50,6 +52,13 @@ class IdleBinarySensor(OsrsActivityEntity, BinarySensorEntity):
         return {
             "since": self.data.get("idle_since"),
             "seconds": self.data.get("idle_seconds", 0),
+            # The plugin's own count of the current spell, which starts at the
+            # tick the player stopped rather than at the Idle delay later.
+            "ticks": self.data.get("idle_ticks", 0),
+            # How long the spell that just ended lasted. Readable at the moment
+            # this turns off, which is the moment worth automating on: back
+            # from a pause, or back after ten minutes away.
+            "last_seconds": self.data.get("last_idle_seconds", 0),
         }
 
 

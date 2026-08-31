@@ -30,24 +30,29 @@ One device per player, with seven entities.
 | **Focus skill** | `mining`, `slayer`, … | "what am I training" |
 | **XP gained** | XP gained this sitting | a graph of your evening |
 | **XP per hour** | rate, from the start of the sitting | is this method actually faster |
-| **Combat style** | `AGGRESSIVE`, `RANGED`, `Slayin'`, … | switching a light when you switch styles |
+| **Combat style** | `AGGRESSIVE`, `RANGED`, `BLOODVELDS`, … | switching a light when you switch styles |
 | **Idle** | on when you are standing around | a nudge when you have been afk for a while |
 | **Online** | on while the plugin is still pushing | knowing you logged out, without polling |
 
 **Activity** is the one to point a display at, and the one both the card and
 the blueprint want. Its attributes carry
 `skills` (what is happening now), `window_skills` (everything with a counter
-still running), `top`, `combat`, `style`, `slayer_kills`, `total_gained_short`
-and the idle state — and every skill row comes with a label that fits in four
-characters, a colour, a percentage through the current level, and a path to its
-icon.
+still running), `top`, `combat`, `style`, `slayer`, `slayer_kills`,
+`total_gained_short` and the idle state — and every skill row comes with a
+label that fits in four characters, a colour, a percentage through the current
+level, and a path to its icon.
 
 ```jinja
 {{ state_attr('sensor.player_activity', 'top').gained_short }}   → "12.3k"
 {{ state_attr('sensor.player_activity', 'style') }}              → "AGGRESSIVE"
 {{ state_attr('sensor.player_activity', 'skills')
    | map(attribute='label') | join(' ') }}                        → "STR ATT HP"
+{{ state_attr('sensor.player_activity', 'slayer').remaining }}    → 42
 ```
+
+`slayer` is `{}` unless you switch **Slayer task** on in the plugin — see
+below. When it is there it carries `task`, `remaining`, `initial`, `done`,
+`pct`, `location`, `streak` and `points`.
 
 You do not have to touch any of that, though. **A dashboard card comes with the
 integration** — it appears in the card picker as *OSRS Activity*, takes one
@@ -97,8 +102,15 @@ Back in the plugin's options, fill in your Home Assistant base URL
 (`http://homeassistant.local:8123` or whatever yours is) and paste the token.
 Then switch on the events you want. **Skill XP is the one this needs** — it is
 what makes XP arrive the moment you earn it instead of once per hiscores poll.
-Idle detection is optional and drives `binary_sensor.<player>_idle`; its
-threshold lives here, in the plugin, not in Home Assistant.
+
+Two more are worth having and both are off by default:
+
+- **Idle detection** drives `binary_sensor.<player>_idle`. How long you have to
+  stand still first is set here, in the plugin, not in Home Assistant.
+- **Slayer task** puts the task name and the remaining count on the combat
+  screen, in place of the kill count guessed from your XP. It reads RuneLite's
+  own Slayer plugin, so that one has to be enabled too — if it is not, nothing
+  writes the task and this stays empty.
 
 ### The RuneLite integration
 
@@ -229,25 +241,20 @@ require it to be on the value that means "OSRS".
 
 ## Known limits
 
-All three are limits of what the RuneLite plugin sends, not of what this does
-with it.
+Limits of what the RuneLite plugin sends, not of what this does with it.
 
-**Idle only clears on your next XP drop.** The plugin sends an idle event but
-has no "active again" counterpart, so a gain is the only thing that can clear
-it. On a slow skill that can take a while. A PR for the missing event is open
-upstream; when it lands the change here is one more event listener.
+**The idle events do not say who.** They carry how long the spell lasted, but
+not which account it was, so with two players logged in at once there is no
+telling them apart. Fine as long as only one plays at a time; fixable only on
+the plugin side.
 
-**Slayer kills are derived, not read.** Slayer XP arrives in a fixed amount per
-kill, so a run of equal chunks counts kills. The moment one differs — a
-barrage, a mixed task, a kill that lands together with something else — the
-division stops meaning anything and the count is hidden rather than shown
-wrong. A task name and a real counter need the plugin to send them, which is
-also a PR away. Worth keeping the derivation as a fallback either way: it works
-on tasks the plugin knows nothing about.
-
-**The idle event has no payload,** so with two accounts logged in there is no
-telling which one went idle. Fine as long as only one plays at a time; fixable
-only on the plugin side.
+**Without the Slayer task toggle, kills are derived rather than read.** Slayer
+XP arrives in a fixed amount per kill, so a run of equal chunks counts kills.
+The moment one differs — a barrage, a mixed task, a kill that lands together
+with something else — the division stops meaning anything and the count is
+hidden rather than shown wrong. Switching the toggle on replaces the guess with
+the game's own numbers. The guess stays underneath either way: it needs nothing
+switched on, and it works on tasks the plugin knows nothing about.
 
 ---
 

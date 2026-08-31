@@ -246,12 +246,26 @@ class OsrsActivityCard extends HTMLElement {
     );
   }
 
-  _combat(a) {
+  /** The figure beside the combat heading.
+   *
+   * How many of the task are left when the plugin reports one -- which is the
+   * number the game itself gives you, and the one the heading beside it is
+   * naming. Otherwise the kill count guessed from the shape of the XP, which
+   * is what everyone who has not switched the task on still gets, marked with
+   * an x because it counts up rather than down.
+   */
+  _count(a) {
+    const left = Number(a.slayer?.remaining) || 0;
+    if (left) return String(left);
     const kills = Number(a.slayer_kills) || 0;
+    return kills ? `x${kills}` : "";
+  }
+
+  _combat(a) {
     const perHour = `${Math.round((a.per_hour || 0) / 100) / 10}k/HR`;
     return (
       text(2, 5, a.style, ACCENT) +
-      text(62, 5, kills ? `x${kills}` : "", GREY, "end") +
+      text(62, 5, this._count(a), GREY, "end") +
       this._rule() +
       image(a.style_icon_url, 38, 16, 25) +
       text(2, 19, `+${a.total_gained_short || "0"} XP`, GOLD) +

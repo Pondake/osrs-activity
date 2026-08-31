@@ -136,6 +136,57 @@ def test_slayer_overrides_the_attack_style():
     assert snapshot["style_key"] == "slayer"
 
 
+def slaying(**kwargs):
+    """An engine mid-task, plus the task the game would be reporting."""
+    eng = make()
+    eng.record("strength", 1000, 900, T0)
+    eng.record("slayer", 500, 400, T0)
+    return eng, engine.SlayerTask(**kwargs)
+
+
+def test_the_task_names_the_heading():
+    eng, task = slaying(name="Bloodvelds", remaining=42, initial=150)
+    snapshot = eng.snapshot(T0, task)
+    assert snapshot["style"] == "BLOODVELDS"
+    assert snapshot["style_key"] == "slayer"
+    assert snapshot["slayer"]["remaining"] == 42
+
+
+def test_a_long_task_name_is_cut_to_the_heading_line():
+    eng, task = slaying(name="Aberrant spectres", remaining=8, initial=120)
+    # Eleven characters is what is left beside the count on a 64px panel.
+    assert eng.snapshot(T0, task)["style"] == "ABERRANT SP"
+
+
+def test_no_task_keeps_the_old_heading():
+    """The plugin toggle is off by default, so this is the common case."""
+    eng, _ = slaying(name="unused")
+    snapshot = eng.snapshot(T0)
+    assert snapshot["style"] == "Slayin'"
+    assert snapshot["slayer"] == {}
+
+
+def test_task_progress_is_measured_against_what_was_assigned():
+    eng, task = slaying(name="Gargoyles", remaining=30, initial=120)
+    row = eng.snapshot(T0, task)["slayer"]
+    assert row["done"] == 90
+    assert row["pct"] == 75
+
+
+def test_a_task_picked_up_mid_way_reports_no_percentage():
+    """Logging in part-way through leaves nothing to measure against."""
+    eng, task = slaying(name="Kalphite", remaining=30, initial=0)
+    row = eng.snapshot(T0, task)["slayer"]
+    assert row["remaining"] == 30
+    assert (row["done"], row["pct"]) == (0, 0)
+
+
+def test_every_way_of_saying_there_is_no_task():
+    for absent in ("None", "null", "", "  ", "unknown", "unavailable", None, 0):
+        assert engine.task_name(absent) is None, absent
+    assert engine.task_name(" Fire giants ") == "Fire giants"
+
+
 def test_prayer_does_not_break_combat():
     eng = make()
     eng.record("strength", 1000, 900, T0)
@@ -167,12 +218,44 @@ def test_one_odd_chunk_stops_the_kill_count():
 
 
 def test_idle_is_cleared_by_the_next_gain():
+    """The fallback, for a client that does not report coming back."""
     eng = make()
     eng.record("mining", 1000, 900, T0)
     eng.mark_idle(T0 + timedelta(seconds=30))
     assert eng.snapshot(T0 + timedelta(seconds=30))["idle"] is True
     eng.record("mining", 1100, 1000, T0 + timedelta(seconds=40))
     assert eng.snapshot(T0 + timedelta(seconds=40))["idle"] is False
+
+
+def test_the_active_event_clears_idle_without_any_xp():
+    """Banking and walking grant nothing, which is the whole point of it."""
+    eng = make()
+    eng.record("mining", 1000, 900, T0)
+    eng.mark_idle(T0 + timedelta(seconds=30), ticks=50)
+    assert eng.snapshot(T0 + timedelta(seconds=30))["idle_ticks"] == 50
+
+    eng.mark_active(T0 + timedelta(seconds=90), ticks=150)
+    snapshot = eng.snapshot(T0 + timedelta(seconds=90))
+    assert snapshot["idle"] is False
+    assert snapshot["idle_ticks"] == 0
+    # The plugin's count, not the clock: 150 ticks at 0.6s.
+    assert snapshot["last_idle_seconds"] == 90
+
+
+def test_coming_back_without_a_tick_count_falls_back_to_the_clock():
+    eng = make()
+    eng.record("mining", 1000, 900, T0)
+    eng.mark_idle(T0)
+    eng.mark_active(T0 + timedelta(seconds=45))
+    assert eng.snapshot(T0)["last_idle_seconds"] == 45
+
+
+def test_becoming_active_when_never_idle_changes_nothing():
+    eng = make()
+    eng.mark_active(T0, ticks=999)
+    snapshot = eng.snapshot(T0)
+    assert snapshot["idle"] is False
+    assert snapshot["last_idle_seconds"] == 0
 
 
 def test_logging_out_ends_the_sitting():

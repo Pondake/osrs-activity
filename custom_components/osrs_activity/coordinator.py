@@ -1,8 +1,8 @@
 """Wiring between Home Assistant and the activity engine.
 
-Three inputs: the RuneLite skill sensors changing, the plugin's idle event, and
-a clock. One output: a snapshot, dispatched to the entities when it differs
-from the last one.
+Four inputs: the RuneLite skill sensors changing, the plugin's two idle events,
+the slayer task sensor, and a clock. One output: a snapshot, dispatched to the
+entities when it differs from the last one.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from homeassistant.helpers.event import (
 )
 
 from .const import (
+    EVENT_ACTIVE,
     EVENT_IDLE,
     ICON_BLANK,
     ICON_DIR,
@@ -29,7 +30,7 @@ from .const import (
     TICK_SECONDS,
     VITALS,
 )
-from .engine import ActivityEngine
+from .engine import ActivityEngine, SlayerTask, task_name
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,6 +44,10 @@ SKILL_MARKER = "_skill_"
 SKILL_TOTAL = "total"
 # The RuneLite status sensor for a player, which carries last_ping_time.
 STATUS_MARKER = "_player_status"
+# The slayer task sensor. Optional at both ends: the plugin toggle that feeds
+# it is off by default, and the entity only exists on a recent enough build of
+# the RuneLite integration, so nothing here may assume it is there.
+SLAYER_MARKER = "_slayer_task"
 
 
 def sanitize(text: str) -> str:
@@ -73,8 +78,12 @@ class ActivityCoordinator:
         self._status_uid = (
             f"{RUNELITE_DOMAIN}_{sanitize(username)}{STATUS_MARKER}"
         )
+        self._slayer_uid = (
+            f"{RUNELITE_DOMAIN}_{sanitize(username)}{SLAYER_MARKER}"
+        )
         self._entities: dict[str, str] = {}  # entity_id -> skill
         self._status_entity: str | None = None
+        self._slayer_entity: str | None = None
         self._vitals: dict[str, str] = {}  # role -> entity_id
         self._unsub_states = None
         self._unsubs: list = []
@@ -91,6 +100,9 @@ class ActivityCoordinator:
 
         self._unsubs.append(
             self.hass.bus.async_listen(EVENT_IDLE, self._handle_idle)
+        )
+        self._unsubs.append(
+            self.hass.bus.async_listen(EVENT_ACTIVE, self._handle_active)
         )
         self._unsubs.append(
             self.hass.bus.async_listen(
@@ -126,6 +138,7 @@ class ActivityCoordinator:
         registry = er.async_get(self.hass)
         found: dict[str, str] = {}
         status = None
+        slayer = None
         prefix = f"{RUNELITE_DOMAIN}_{sanitize(self.username)}"
         wanted = {
             template.format(prefix=prefix): role
@@ -138,6 +151,9 @@ class ActivityCoordinator:
             if entry.unique_id == self._status_uid:
                 status = entry.entity_id
                 continue
+            if entry.unique_id == self._slayer_uid:
+                slayer = entry.entity_id
+                continue
             if entry.unique_id in wanted:
                 vitals[wanted[entry.unique_id]] = entry.entity_id
                 # skill_hitpoints is also a skill, so no continue here.
@@ -148,15 +164,22 @@ class ActivityCoordinator:
                 found[entry.entity_id] = skill
 
         self._vitals = vitals
-        if found == self._entities and status == self._status_entity:
+        if (
+            found == self._entities
+            and status == self._status_entity
+            and slayer == self._slayer_entity
+        ):
             return
 
         self._entities = found
         self._status_entity = status
+        self._slayer_entity = slayer
         if self._unsub_states:
             self._unsub_states()
             self._unsub_states = None
-        watched = list(found) + ([status] if status else [])
+        watched = list(found) + [
+            entity for entity in (status, slayer) if entity
+        ]
         if watched:
             self._unsub_states = async_track_state_change_event(
                 self.hass, watched, self._handle_state
@@ -207,9 +230,12 @@ class ActivityCoordinator:
             return
         skill = self._entities.get(event.data["entity_id"])
         if skill is None:
-            # The status sensor is watched too, so a login shows up without
-            # waiting for the tick.
-            if event.data["entity_id"] == self._status_entity:
+            # The status and slayer task sensors are watched too, so a login
+            # and a new task show up without waiting for the tick.
+            if event.data["entity_id"] in (
+                self._status_entity,
+                self._slayer_entity,
+            ):
                 self._publish()
             return
         xp = _as_int(new_state.state)
@@ -230,7 +256,18 @@ class ActivityCoordinator:
         RuneLite plugin's own panel. There is no threshold here, so if it fires
         too eagerly that setting is where to change it.
         """
-        self.engine.mark_idle(datetime.now())
+        self.engine.mark_idle(datetime.now(), _ticks(event))
+        self._publish()
+
+    @callback
+    def _handle_active(self, event: Event) -> None:
+        """The plugin says the player is doing something again.
+
+        The counterpart to the idle event, and the reason the idle flag now
+        clears on the tick the player moves rather than on their next XP drop.
+        Fires once per idle spell, so there is nothing to debounce.
+        """
+        self.engine.mark_active(datetime.now(), _ticks(event))
         self._publish()
 
     @callback
@@ -258,7 +295,7 @@ class ActivityCoordinator:
                 )
         self._was_online = online
 
-        data = self.engine.snapshot(datetime.now())
+        data = self.engine.snapshot(datetime.now(), self._task())
         self._decorate(data, online, ping)
 
         signature = (
@@ -271,6 +308,12 @@ class ActivityCoordinator:
             data["window"],
             tuple(row["key"] for row in data["skills"]),
             data["style"],
+            # A new task, and each kill off it. Unlike health this is worth a
+            # publish: it moves once per kill rather than once per hit, and
+            # during a task the XP rows are changing anyway -- so in practice
+            # this adds no redraws, it only stops the count going stale when
+            # the last thing to change was the task itself.
+            (data["slayer"].get("task"), data["slayer"].get("remaining")),
         )
         if not force and signature == self._last_signature:
             return
@@ -312,6 +355,35 @@ class ActivityCoordinator:
         return f"/local/{ICON_DIR}/{name}" if name else None
 
 
+    def _task(self) -> SlayerTask | None:
+        """The current slayer task, or None when there isn't one to read.
+
+        Absent at three different levels, all of them normal: no such entity on
+        an older RuneLite integration, no push at all while the plugin's Slayer
+        task toggle is off, and an explicit "no task" once it is on. The last
+        one arrives as a value rather than as silence -- see task_name.
+        """
+        if not self._slayer_entity:
+            return None
+        state = self.hass.states.get(self._slayer_entity)
+        if state is None:
+            return None
+        # The attribute rather than the state: they carry the same name, but
+        # the attribute is what the plugin actually writes.
+        name = task_name(state.attributes.get("task")) or task_name(state.state)
+        if name is None:
+            return None
+        return SlayerTask(
+            name=name,
+            remaining=_as_int(state.attributes.get("remaining_amount")) or 0,
+            initial=_as_int(state.attributes.get("initial_amount")) or 0,
+            # The plugin stringifies an unset location, so this arrives as the
+            # literal "null" rather than as nothing.
+            location=task_name(state.attributes.get("task_location")) or "",
+            streak=_as_int(state.attributes.get("streak")) or 0,
+            points=_as_int(state.attributes.get("points")) or 0,
+        )
+
     def _vital(self, now_role: str, max_role: str) -> int | None:
         """Percent full, or None when this player has no such sensor.
 
@@ -351,6 +423,11 @@ class ActivityCoordinator:
             return False, None
         age = (datetime.now(seen.tzinfo) - seen).total_seconds()
         return age <= PING_TIMEOUT, ping
+
+
+def _ticks(event: Event) -> int | None:
+    """idle_ticks off an idle or active event, if that build sends it."""
+    return _as_int((event.data or {}).get("idle_ticks"))
 
 
 def _as_int(value) -> int | None:

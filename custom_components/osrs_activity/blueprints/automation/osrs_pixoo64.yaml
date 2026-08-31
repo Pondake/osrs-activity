@@ -9,6 +9,10 @@ blueprint:
     screen when you are focused on one thing, and a bar chart for anything else.
 
 
+    On a slayer task the combat screen names the task and counts down what is
+    left of it, if you have switched Slayer task on in the RuneLite plugin.
+
+
     Redraws itself whenever the XP session sensor changes, so creating it is
     all there is to it.
 
@@ -126,6 +130,13 @@ variables:
   online: "{{ state_attr(activity, 'online') | default(false, true) }}"
   account: "{{ state_attr(activity, 'account') | default('OSRS', true) }}"
 
+  # What is left of the slayer task, or 0 when there is no task to read. Empty
+  # unless the Slayer task toggle is on in the RuneLite plugin, which it is not
+  # by default -- so the combat screen falls back to the kill count guessed
+  # from the XP, and neither is drawn when there is nothing to draw.
+  task_left: "{{ (state_attr(activity, 'slayer') or {}).get('remaining') | int(0) }}"
+  task_kills: "{{ state_attr(activity, 'slayer_kills') | int(0) }}"
+
   # The integration resolves health and prayer itself -- it already knows which
   # player this is. -1 means it found no such sensor, which draws in the
   # background colour and so draws nothing.
@@ -152,8 +163,8 @@ actions:
       # ---------------------------------------------------------------- combat
       # Everything gaining XP is a combat skill. The heading is the attack
       # style, which is read off from which of attack/strength/defence are
-      # ticking -- or the slayer heading, because you know what weapon you are
-      # holding and you cannot see how far along the task is.
+      # ticking -- or the slayer task, because you know what weapon you are
+      # holding and you cannot see what you are killing or how much is left.
       - conditions: "{{ combat }}"
         sequence:
           - action: divoom_pixoo.show_message
@@ -182,8 +193,12 @@ actions:
                     position: [2, 5]
                     font: PICO_8
                     color: "{{ accent }}"
+                  # How many of the task are left, which is the number the
+                  # game gives you and the one the heading beside it names.
+                  # Without a task, the kills guessed from the XP, marked with
+                  # an x because that one counts up rather than down.
                   - type: text
-                    content: "{% set k = state_attr(activity, 'slayer_kills') | int(0) %}{% if k > 0 %}x{{ k }}{% endif %}"
+                    content: "{% if task_left > 0 %}{{ task_left }}{% elif task_kills > 0 %}x{{ task_kills }}{% endif %}"
                     position: [62, 5]
                     font: PICO_8
                     color: [150, 150, 160]

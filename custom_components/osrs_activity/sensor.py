@@ -154,7 +154,7 @@ class XpPerHourSensor(OsrsActivityEntity, SensorEntity):
 
 
 class CombatStyleSensor(OsrsActivityEntity, SensorEntity):
-    """Attack style, or the slayer heading, while in combat."""
+    """Attack style, or the slayer task, while in combat."""
 
     _attr_icon = "mdi:sword"
 
@@ -170,5 +170,9 @@ class CombatStyleSensor(OsrsActivityEntity, SensorEntity):
         return {
             "combat": self.data.get("combat", False),
             "style_key": self.data.get("style_key", ""),
+            # The task as the game has it, and the kill count guessed from the
+            # XP. Empty when the plugin's Slayer task toggle is off, which it
+            # is by default -- hence keeping the guess alongside it.
+            **self.data.get("slayer", {}),
             "slayer_kills": self.data.get("slayer_kills", 0),
         }

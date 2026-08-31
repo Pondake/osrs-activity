@@ -21,11 +21,14 @@ from .const import (
     COLOUR_FALLBACK,
     COLOURS,
     COMBAT_SKILLS,
+    GAME_TICK,
     LABELS,
     MAX_LEVEL,
     MAX_XP,
     MELEE_STYLES,
+    NO_TASK,
     NOT_A_STYLE,
+    TASK_LABEL_MAX,
 )
 
 
@@ -84,8 +87,72 @@ def label_for(skill: str) -> str:
     return LABELS.get(skill, skill[:4].upper())
 
 
+def task_name(value) -> str | None:
+    """A real slayer task name, or None for every way of saying there isn't one.
+
+    The plugin reports "no task" rather than going quiet, so an empty task
+    arrives as a value: "None" for the task itself, "null" for a location it
+    stringified without checking, and whatever Home Assistant shows for a
+    sensor that has never been written. All of them mean the same thing here.
+    """
+    if not isinstance(value, str):
+        return None
+    name = value.strip()
+    return None if name.lower() in NO_TASK else name
+
+
+def task_label(name: str) -> str:
+    """The task name cut to what shares the heading line with the count."""
+    return name[:TASK_LABEL_MAX].strip().upper()
+
+
 def colour_for(skill: str) -> tuple[int, int, int]:
     return COLOURS.get(skill, COLOUR_FALLBACK)
+
+
+@dataclass(frozen=True)
+class SlayerTask:
+    """The task the game itself knows about, passed in from outside.
+
+    The engine cannot work this out: the counts come from RuneLite's own Slayer
+    plugin, by way of a sensor. It is handed in per snapshot rather than stored
+    because it is not this file's state -- nothing here changes it, and reading
+    it fresh means a task cancelled between two ticks is gone by the next one.
+
+    Optional throughout: the plugin toggle that reports it is off by default,
+    so most players never send one.
+    """
+
+    name: str
+    remaining: int = 0
+    initial: int = 0
+    location: str = ""
+    streak: int = 0
+    points: int = 0
+
+    def as_row(self) -> dict:
+        """Flat form for a display, with the progress worked out.
+
+        `initial` can be zero -- an in-progress task read off a fresh login has
+        a remaining count and nothing to measure it against -- so `pct` is only
+        meaningful when there is something to divide by.
+        """
+        done = max(0, self.initial - self.remaining) if self.initial else 0
+        return {
+            "task": self.name,
+            "label": task_label(self.name),
+            "remaining": self.remaining,
+            "initial": self.initial,
+            "done": done,
+            "pct": (
+                max(0, min(100, round(done * 100 / self.initial)))
+                if self.initial
+                else 0
+            ),
+            "location": self.location,
+            "streak": self.streak,
+            "points": self.points,
+        }
 
 
 @dataclass
@@ -137,6 +204,13 @@ class ActivityEngine:
     focus_seconds: int
     sessions: dict[str, Session] = field(default_factory=dict)
     idle_at: datetime | None = None
+    # Game ticks of the idle spell currently running, as the plugin counts
+    # them. Zero when it sent none, which an older build does.
+    idle_ticks: int = 0
+    # How long the spell that just ended lasted. Survives the spell so an
+    # automation can tell "back from a two-second pause" from "back after ten
+    # minutes" at the moment the player returns.
+    last_idle_seconds: int = 0
 
     def record(
         self, skill: str, xp: int, previous: int | None, now: datetime
@@ -168,13 +242,34 @@ class ActivityEngine:
             session.last = now
             session.ticks += 1
 
-        # XP arriving means you are not idle. Until the plugin grows a
-        # "player is active again" event this is the only thing that clears it.
-        self.idle_at = None
+        # XP arriving means you are not idle. This used to be the ONLY thing
+        # that cleared it, which is why the flag stuck through banking and
+        # walking. The plugin now reports the edge itself; this stays as the
+        # fallback for a build that does not, and for a player who has the idle
+        # events switched off at one end but not the other.
+        self.mark_active(now)
         return True
 
-    def mark_idle(self, now: datetime) -> None:
+    def mark_idle(self, now: datetime, ticks: int | None = None) -> None:
         self.idle_at = now
+        self.idle_ticks = ticks or 0
+
+    def mark_active(self, now: datetime, ticks: int | None = None) -> None:
+        """The idle spell is over. Nothing to do if there was not one.
+
+        The plugin's own count is preferred over the clock here: it starts at
+        the tick the player actually stopped, where idle_at only starts when
+        the idle event arrived, which is a configurable delay later.
+        """
+        if self.idle_at is None:
+            return
+        self.last_idle_seconds = (
+            round(ticks * GAME_TICK)
+            if ticks
+            else int((now - self.idle_at).total_seconds())
+        )
+        self.idle_at = None
+        self.idle_ticks = 0
 
     def end(self) -> int:
         """Drop every counter. Returns how many there were.
@@ -186,6 +281,7 @@ class ActivityEngine:
         count = len(self.sessions)
         self.sessions.clear()
         self.idle_at = None
+        self.idle_ticks = 0
         return count
 
     def restore(self, raw: dict) -> int:
@@ -231,8 +327,12 @@ class ActivityEngine:
             ),
         }
 
-    def snapshot(self, now: datetime) -> dict:
-        """Everything a display could want, recomputed from the sessions."""
+    def snapshot(self, now: datetime, task: SlayerTask | None = None) -> dict:
+        """Everything a display could want, recomputed from the sessions.
+
+        `task` is the live slayer task, or None when the player has none or
+        never reports one. It is only ever read here -- see SlayerTask.
+        """
         rows = [
             self._row(skill, session, now)
             for skill, session in self.sessions.items()
@@ -255,7 +355,7 @@ class ActivityEngine:
 
         keys = [row["key"] for row in focus]
         combat = len(focus) >= 2 and all(key in COMBAT_SKILLS for key in keys)
-        style, style_key = self._style(focus, keys) if combat else ("", "")
+        style, style_key = self._style(focus, keys, task) if combat else ("", "")
 
         total = sum(row["gained"] for row in focus)
         return {
@@ -267,6 +367,11 @@ class ActivityEngine:
             "combat": combat,
             "style": style,
             "style_key": style_key,
+            # The task the game knows about, and the kill count guessed from
+            # the shape of the XP. The guess predates the real thing and stays
+            # because the plugin toggle that reports a task is off by default,
+            # so for most players it is still the only count there is.
+            "slayer": task.as_row() if task else {},
             "slayer_kills": next(
                 (row["kills"] for row in focus if row["key"] == "slayer"), 0
             ),
@@ -274,6 +379,8 @@ class ActivityEngine:
             "total_gained_short": short(total),
             "per_hour": sum(row["per_hour"] for row in focus),
             "idle": self.idle_at is not None,
+            "idle_ticks": self.idle_ticks,
+            "last_idle_seconds": self.last_idle_seconds,
             "idle_since": (
                 self.idle_at.isoformat(timespec="seconds")
                 if self.idle_at
@@ -293,7 +400,9 @@ class ActivityEngine:
             },
         }
 
-    def _style(self, focus: list[dict], keys: list[str]) -> tuple[str, str]:
+    def _style(
+        self, focus: list[dict], keys: list[str], task: SlayerTask | None = None
+    ) -> tuple[str, str]:
         """Which attack style, read off from which skills are gaining."""
         drivers = [row for row in focus if row["key"] not in NOT_A_STYLE]
         if not drivers:
@@ -313,8 +422,12 @@ class ActivityEngine:
         if "slayer" in keys:
             # Slayer overrides the attack style in the heading. You know
             # perfectly well whether you are holding an axe or a bow; what you
-            # cannot see is how far along the task is.
-            return "Slayin'", "slayer"
+            # cannot see is what the task is and how far along it is.
+            #
+            # The name when the plugin reports one, and the old placeholder
+            # when it does not -- the toggle for it is off by default, so the
+            # placeholder is what most players still get.
+            return (task_label(task.name) if task else "Slayin'"), "slayer"
         if "ranged" in fresh_keys:
             return "RANGED", "ranged"
         if "magic" in fresh_keys:

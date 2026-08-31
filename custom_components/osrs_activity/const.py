@@ -30,7 +30,20 @@ TICK_SECONDS = 2
 
 SIGNAL_UPDATE = f"{DOMAIN}_update"
 
+# The plugin's two idle edges. It used to only report the first one, so the
+# only way to tell that a player had come back was to wait for their next XP
+# drop -- which walking, banking, questing and dialogue do not produce, so the
+# idle flag stuck for minutes after they were demonstrably active again. The
+# active event closes that gap; the XP fallback in the engine stays as a safety
+# net for anyone on an older plugin build.
+#
+# Both carry idle_ticks, which is how long the idle spell lasted. Optional:
+# an older build sends no data at all.
 EVENT_IDLE = "runelite_idle_notify"
+EVENT_ACTIVE = "runelite_active_notify"
+
+# A game tick, in seconds. idle_ticks is counted in these.
+GAME_TICK = 0.6
 
 # How long after the plugin's last push the player still counts as logged in.
 #
@@ -107,6 +120,21 @@ LABELS: dict[str, str] = {
     "ranged": "RNG", "magic": "MAG", "mining": "MINE", "fishing": "FISH",
     "farming": "FARM", "hunter": "HUNT", "runecraft": "RUNE",
 }
+
+# A slayer task name takes the place of the attack style in the combat heading,
+# and it shares that line with the remaining count on the right. Eleven
+# characters is what is left over: 4px per character against a 64px panel, less
+# the two-pixel margin and the widest count that line ever carries. Names run
+# past it often enough (ABERRANT SPECTRES, SMOKE DEVILS) that this truncates
+# rather than wraps -- the same trade LABELS makes one line up.
+TASK_LABEL_MAX = 11
+
+# What the plugin sends when there is no task. It reports the absence rather
+# than staying quiet, or a finished task would sit on the display forever --
+# so these are values, not missing data. "null" is in here because the plugin
+# stringifies an unset location, and "None" because that is the sentinel it
+# picked for the task itself.
+NO_TASK = frozenset({"", "none", "null", "unknown", "unavailable"})
 
 # One colour per skill, chosen for telling them APART inside a group that runs
 # together -- not for fidelity to the wiki. The combat set is the one most often
