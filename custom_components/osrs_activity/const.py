@@ -124,10 +124,44 @@ LABELS: dict[str, str] = {
 # A slayer task name takes the place of the attack style in the combat heading,
 # and it shares that line with the remaining count on the right. Eleven
 # characters is what is left over: 4px per character against a 64px panel, less
-# the two-pixel margin and the widest count that line ever carries. Names run
-# past it often enough (ABERRANT SPECTRES, SMOKE DEVILS) that this truncates
-# rather than wraps -- the same trade LABELS makes one line up.
+# the two-pixel margin and the widest count that line ever carries.
 TASK_LABEL_MAX = 11
+
+# Cutting a name to TASK_LABEL_MAX characters and calling it done reads as
+# broken -- "Aberrant spectres" becomes "ABERRANT SP", a word sheared in
+# half. task_label() drops a leading "The " (pure filler on a boss task) and
+# then keeps whole words up to the limit instead. That alone is not quite
+# enough: some names are long on their OWN first word, and some collide once
+# trimmed to the same leading word (Black Knights / Black demons / Black
+# dragons all become "BLACK"). This is the fix for both, and it exists rather
+# than a smarter general algorithm because there is no smarter general
+# algorithm -- the same problem LABELS solves for skill names one line up.
+#
+# Derived from every name RuneLite's own Slayer plugin can produce (its
+# Task.java, checked programmatically for exactly these two failure modes --
+# see tests/test_engine.py), not guessed. Keyed lowercase; a name not in here
+# gets the plain strip-and-trim treatment. If Jagex ships a slayer task this
+# does not know about, re-run that check against the current Task.java and
+# add whatever it flags.
+TASK_ABBREVIATIONS: dict[str, str] = {
+    "abyssal demons": "ABYSSAL DEM",
+    "the abyssal sire": "SIRE",
+    "black knights": "BLACK KNIG",
+    "black demons": "BLACK DEM",
+    "black dragons": "BLACK DRA",
+    "cave crawlers": "CAVE CRAWL",
+    "cave horrors": "CAVE HORR",
+    "the cave kraken boss": "KRAKEN BOSS",
+    "chaos druids": "CHAOS DRUI",
+    "the chaos elemental": "CHAOS ELEM",
+    "the chaos fanatic": "CHAOS FANA",
+    "dagannoth kings": "DKS",
+    "lesser nagua": "LESSER NAG",
+    "lesser demons": "LESSER DEM",
+    "fleshcrawlers": "FLESHCRAWL",
+    "otherworldly beings": "OTHERWORLD",
+    "the thermonuclear smoke devil": "TSD",
+}
 
 # What the plugin sends when there is no task. It reports the absence rather
 # than staying quiet, or a finished task would sit on the display forever --

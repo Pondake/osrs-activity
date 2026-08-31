@@ -154,8 +154,8 @@ def test_the_task_names_the_heading():
 
 def test_a_long_task_name_is_cut_to_the_heading_line():
     eng, task = slaying(name="Aberrant spectres", remaining=8, initial=120)
-    # Eleven characters is what is left beside the count on a 64px panel.
-    assert eng.snapshot(T0, task)["style"] == "ABERRANT SP"
+    # Whole words only, not a hard 11-char slice -- see test_task_label_*.
+    assert eng.snapshot(T0, task)["style"] == "ABERRANT"
 
 
 def test_no_task_keeps_the_old_heading():
@@ -181,10 +181,113 @@ def test_a_task_picked_up_mid_way_reports_no_percentage():
     assert (row["done"], row["pct"]) == (0, 0)
 
 
+def test_a_slow_kill_does_not_drop_slayer_out_of_focus():
+    """The bug report: a tough target grants melee XP every hit, slayer XP
+    only on the kill -- so slayer used to age out of focus first, and the
+    heading flipped to plain melee mid-fight even though nothing changed."""
+    eng = make(window_minutes=5, focus_seconds=25)
+    eng.record("strength", 1000, 900, T0)
+    eng.record("slayer", 500, 400, T0)
+
+    later = T0 + timedelta(seconds=120)  # past focus_seconds, well under window
+    eng.record("strength", 1200, 1000, later)  # melee keeps landing hits
+    snapshot = eng.snapshot(later)
+    assert snapshot["style"] == "Slayin'"
+    assert snapshot["style_key"] == "slayer"
+
+
+def test_a_slow_kill_still_expires_past_the_session_window():
+    eng = make(window_minutes=5, focus_seconds=25)
+    eng.record("strength", 1000, 900, T0)
+    eng.record("slayer", 500, 400, T0)
+
+    later = T0 + timedelta(minutes=6)  # past the session window itself
+    eng.record("strength", 1200, 1000, later)
+    snapshot = eng.snapshot(later)
+    assert snapshot["style"] != "Slayin'"
+
+
 def test_every_way_of_saying_there_is_no_task():
     for absent in ("None", "null", "", "  ", "unknown", "unavailable", None, 0):
         assert engine.task_name(absent) is None, absent
     assert engine.task_name(" Fire giants ") == "Fire giants"
+
+
+def test_task_label_drops_the_filler_word():
+    assert engine.task_label("The Whisperer") == "WHISPERER"
+    assert engine.task_label("The Giant Mole") == "GIANT MOLE"
+
+
+def test_task_label_cuts_at_a_word_boundary_not_mid_word():
+    """The bug report: ABERRANT SP reads as broken, not as a name."""
+    assert engine.task_label("Aberrant spectres") == "ABERRANT"
+    assert engine.task_label("Deranged Archaeologist") == "DERANGED"
+
+
+def test_task_label_uses_the_curated_abbreviation_when_there_is_one():
+    assert engine.task_label("Dagannoth Kings") == "DKS"
+    assert engine.task_label("The Thermonuclear Smoke Devil") == "TSD"
+
+
+# Every task name RuneLite's own Slayer plugin can produce (net.runelite.
+# client.plugins.slayer.Task, checked 2026-08-31). A snapshot, not a live
+# fetch -- if Jagex ships a new slayer task, re-run the same check against
+# the current Task.java and extend TASK_ABBREVIATIONS with whatever this
+# then flags.
+ALL_SLAYER_TASK_NAMES = [
+    "Aberrant spectres", "Abyssal demons", "Ankou", "Aquanites", "Araxxor",
+    "Araxytes", "Aviansies", "Bandits", "Banshees", "Barrows Brothers",
+    "Basilisks", "Bats", "Bears", "Birds", "Black Knights", "Black demons",
+    "Black dragons", "Bloodveld", "Blue dragons", "Brine rats", "Callisto",
+    "Catablepon", "Cave bugs", "Cave crawlers", "Cave horrors", "Cave kraken",
+    "Cave slimes", "Cerberus", "Chaos druids", "Cockatrice",
+    "Commander Zilyana", "Cows", "Crabs", "Crawling hands",
+    "Crazy Archaeologists", "Crocodiles", "Custodian Stalkers", "Dagannoth",
+    "Dagannoth Kings", "Dark beasts", "Dark warriors",
+    "Deranged Archaeologist", "Dogs", "Drakes", "Duke Sucellus",
+    "Dust devils", "Dwarves", "Earth warriors", "Elves", "Ents",
+    "Fever spiders", "Fire giants", "Fleshcrawlers",
+    "Fossil island wyverns", "Frost dragons", "Gargoyles",
+    "General Graardor", "Ghosts", "Ghouls", "Goblins", "Greater demons",
+    "Green dragons", "Gryphons", "Harpie bug swarms", "Hellhounds",
+    "Hill giants", "Hobgoblins", "Hydras", "Ice giants", "Ice warriors",
+    "Icefiends", "Infernal mages", "Jellies", "Jungle horrors",
+    "K'ril Tsutsaroth", "Kalphites", "Killerwatts", "Kree'arra", "Kurask",
+    "Lava Dragons", "Lesser Nagua", "Lesser demons", "Lizardmen", "Lizards",
+    "Magic axes", "Mammoths", "Metal dragons", "Minotaurs", "Mogres",
+    "Molanisks", "Monkeys", "Moss giants", "Mutated zygomites", "Nechryael",
+    "Ogres", "Otherworldly beings", "Pirates", "Pyrefiends", "Rats",
+    "Red dragons", "Revenants", "Rockslugs", "Rogues", "Sarachnis",
+    "Scabarites", "Scorpia", "Scorpions", "Sea snakes", "Shades",
+    "Shadow warriors", "Skeletal wyverns", "Skeletons", "Smoke devils",
+    "Sourhogs", "Spiders", "Spiritual creatures", "Suqahs", "Terror dogs",
+    "The Abyssal Sire", "The Alchemical Hydra", "The Cave Kraken Boss",
+    "The Chaos Elemental", "The Chaos Fanatic", "The Giant Mole",
+    "The Grotesque Guardians", "The Kalphite Queen", "The King Black Dragon",
+    "The Leviathan", "The Maggot King", "The Phantom Muspah",
+    "The Shellbane Gryphon", "The Thermonuclear Smoke Devil",
+    "The Whisperer", "Trolls", "Turoth", "TzKal-Zuk", "TzTok-Jad", "Tzhaar",
+    "Vampyres", "Vardorvis", "Venators", "Venenatis", "Vet'ion", "Vorkath",
+    "Wall beasts", "Warped Creatures", "Waterfiends", "Werewolves", "Wolves",
+    "Wyrms", "Zombies", "Zulrah",
+]
+
+
+def test_every_real_task_name_fits_the_heading():
+    for name in ALL_SLAYER_TASK_NAMES:
+        label = engine.task_label(name)
+        assert len(label) <= engine.TASK_LABEL_MAX, (name, label)
+
+
+def test_no_two_real_task_names_collide_once_trimmed():
+    seen = {}
+    collisions = []
+    for name in ALL_SLAYER_TASK_NAMES:
+        label = engine.task_label(name)
+        if label in seen and seen[label] != name:
+            collisions.append((seen[label], name, label))
+        seen[label] = name
+    assert not collisions
 
 
 def test_prayer_does_not_break_combat():

@@ -28,6 +28,7 @@ from .const import (
     MELEE_STYLES,
     NO_TASK,
     NOT_A_STYLE,
+    TASK_ABBREVIATIONS,
     TASK_LABEL_MAX,
 )
 
@@ -102,8 +103,31 @@ def task_name(value) -> str | None:
 
 
 def task_label(name: str) -> str:
-    """The task name cut to what shares the heading line with the count."""
-    return name[:TASK_LABEL_MAX].strip().upper()
+    """The task name cut to what shares the heading line with the count.
+
+    A curated override first -- see TASK_ABBREVIATIONS for why a plain trim
+    is not enough for every name. Otherwise: drop a leading "The " (filler on
+    a boss task, never load-bearing), then keep whole words up to the limit
+    rather than shearing the one that does not fit. The final slice is a
+    safety net for a name whose first word alone is still too long; nothing
+    in the game does that today, so in practice it never fires.
+    """
+    override = TASK_ABBREVIATIONS.get(name.strip().lower())
+    if override:
+        return override.upper()
+
+    trimmed = name[4:] if name.lower().startswith("the ") else name
+    if len(trimmed) <= TASK_LABEL_MAX:
+        return trimmed.upper()
+
+    words = trimmed.split(" ")
+    kept = words[0]
+    for word in words[1:]:
+        candidate = f"{kept} {word}"
+        if len(candidate) > TASK_LABEL_MAX:
+            break
+        kept = candidate
+    return kept[:TASK_LABEL_MAX].upper()
 
 
 def colour_for(skill: str) -> tuple[int, int, int]:
@@ -342,7 +366,22 @@ class ActivityEngine:
 
         # What is on screen NOW. If that falls empty during a short pause, show
         # the whole window again rather than nothing.
-        focus = [row for row in rows if row["idle"] <= self.focus_seconds] or rows
+        #
+        # Slayer gets the session window's own length here, not focus_seconds.
+        # Its XP lands once per kill rather than once per hit, so a target that
+        # takes a while to put down can go longer between gains than
+        # focus_seconds allows without the player having switched to anything
+        # else -- which used to drop the task out of view and show plain melee
+        # mid-kill. The session window is already the threshold for "this
+        # counter is still the same sitting", so reusing it here means slayer
+        # never outlives its own counter, and needs no threshold of its own.
+        slayer_grace = self.window.total_seconds()
+        focus = [
+            row
+            for row in rows
+            if row["idle"]
+            <= (slayer_grace if row["key"] == "slayer" else self.focus_seconds)
+        ] or rows
 
         top = focus[0] if focus else {}
         # Bars scale against the biggest gainer INSIDE the focus, not against an
