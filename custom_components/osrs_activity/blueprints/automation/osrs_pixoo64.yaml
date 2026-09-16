@@ -13,6 +13,11 @@ blueprint:
     left of it, if you have switched Slayer task on in the RuneLite plugin.
 
 
+    With Quest progress switched on there as well, a quest screen names the
+    quest you are on while you are working through it, and completing one
+    gets a few seconds of confetti before the panel goes back to work.
+
+
     Redraws itself whenever the XP session sensor changes, so creating it is
     all there is to it.
 
@@ -65,6 +70,40 @@ blueprint:
       default: true
       selector:
         boolean:
+    quests:
+      name: Quests
+      icon: mdi:script-text
+      description: >-
+        Both need Quest progress switched on in the RuneLite plugin; without
+        it there is nothing to draw and these do nothing.
+      collapsed: true
+      input:
+        quest_screen:
+          name: Quest screen
+          description: >-
+            Name the quest you are on. Drawn while a step of it landed
+            recently, and in place of the standby screen while one is in
+            progress and nothing is gaining XP.
+          default: true
+          selector:
+            boolean:
+        celebrate:
+          name: Celebrate a completed quest
+          description: >-
+            A few seconds of confetti when a quest is completed. Honours
+            Only draw when like everything else here, so a panel that is
+            someone else's at that moment stays theirs.
+          default: true
+          selector:
+            boolean:
+        celebrate_buzzer:
+          name: Buzz on completion
+          description: >-
+            Sound the Pixoo's buzzer with the confetti. Off by default; the
+            device's own integration warns the buzzer may not be good for it.
+          default: false
+          selector:
+            boolean:
     styling:
       name: Styling
       icon: mdi:palette
@@ -118,6 +157,9 @@ variables:
   accent: !input accent
   floor: !input min_interval
   standby: !input standby
+  quest_screen: !input quest_screen
+  celebrate: !input celebrate
+  celebrate_buzzer: !input celebrate_buzzer
 
   rows: "{{ state_attr(activity, 'skills') or [] }}"
   top: "{{ state_attr(activity, 'top') or {} }}"
@@ -137,6 +179,27 @@ variables:
   task_left: "{{ (state_attr(activity, 'slayer') or {}).get('remaining') | int(0) }}"
   task_kills: "{{ state_attr(activity, 'slayer_kills') | int(0) }}"
 
+  # The quest last touched, with its name already wrapped to lines that fit
+  # the panel, and the two flags the integration raises on it: questing while
+  # a step landed inside the session window, celebrating for a few seconds
+  # after a completion. All empty unless Quest progress is on in the plugin.
+  quest: "{{ state_attr(activity, 'quest') or {} }}"
+  quest_lines: "{{ quest.get('lines') or [] }}"
+  questing: "{{ quest_screen and (state_attr(activity, 'questing') | default(false, true)) }}"
+  celebrating: "{{ celebrate and (state_attr(activity, 'celebrating') | default(false, true)) }}"
+  done: "{{ state_attr(activity, 'quest_complete') or {} }}"
+  done_lines: "{{ done.get('lines') or [] }}"
+  quest_count: >-
+    {% if (quest.get('total') | int(0)) > 0 %}{{ quest.get('completed') | int(0) }}/{{ quest.get('total') | int(0) }}{% endif %}
+
+  # Confetti for the celebration: two scatters that alternate frame by frame,
+  # and a palette that shifts one step each frame so nothing sits still.
+  # Every dot sits in a margin or between two lines of text, so none of it
+  # lands on a letter.
+  confetti_a: [[0, 0], [10, 0], [52, 0], [62, 1], [0, 8], [62, 9], [1, 27], [20, 28], [42, 27], [61, 28], [0, 40], [62, 44], [8, 52], [30, 53], [50, 52], [62, 54]]
+  confetti_b: [[5, 0], [30, 0], [58, 0], [0, 4], [62, 5], [0, 20], [62, 22], [8, 28], [33, 28], [54, 27], [0, 35], [62, 38], [0, 48], [18, 53], [40, 54], [57, 52]]
+  confetti_colours: [[255, 215, 0], [255, 80, 80], [80, 255, 120], [90, 170, 255], [255, 120, 200], [60, 220, 220], [255, 255, 255], [255, 152, 31]]
+
   # The integration resolves health and prayer itself -- it already knows which
   # player this is. -1 means it found no such sensor, which draws in the
   # background colour and so draws nothing.
@@ -155,11 +218,267 @@ actions:
     value_template: "{{ state_attr(activity, 'window_skills') is not none }}"
 
   # Nothing training and no standby screen means leave the panel alone, so
-  # another automation can own it without this one blanking it.
+  # another automation can own it without this one blanking it. A quest step
+  # and a completion count as something to draw: questing grants no XP, so
+  # without this a quester would never see their screen.
   - condition: template
-    value_template: "{{ active >= 1 or (standby and online) }}"
+    value_template: "{{ celebrating or questing or active >= 1 or (standby and online) }}"
 
   - choose:
+      # ----------------------------------------------------------- celebration
+      # A quest was just completed. Four frames of confetti, a floor apart,
+      # then this run ends; the integration keeps the flag up for a while
+      # longer, so anything that redraws in the meantime celebrates again,
+      # and the flag dropping is what sends the panel back to work. The
+      # headings are ELEVEN_PIX, the one font here that reads as a shout.
+      - conditions: "{{ celebrating }}"
+        sequence:
+          - if: "{{ celebrate_buzzer }}"
+            then:
+              - action: divoom_pixoo.play_buzzer
+                continue_on_error: true
+                target:
+                  entity_id: !input panel
+                data:
+                  buzz_cycle_time_millis: 150
+                  idle_cycle_time_millis: 100
+                  total_time: 1000
+          - repeat:
+              count: 4
+              sequence:
+                - variables:
+                    dots: "{{ confetti_a if repeat.index is odd else confetti_b }}"
+                    shout: "{% if repeat.index is odd %}[255,215,0]{% else %}[255,255,255]{% endif %}"
+                    shout_2: "{% if repeat.index is odd %}[255,255,255]{% else %}[255,215,0]{% endif %}"
+                - action: divoom_pixoo.show_message
+                  continue_on_error: true
+                  target:
+                    entity_id: !input panel
+                  data:
+                    page_data:
+                      page_type: components
+                      components:
+                        - type: rectangle
+                          position: [0, 0]
+                          size: [64, 64]
+                          color: "{{ bg }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[0] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(0 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[1] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(1 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[2] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(2 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[3] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(3 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[4] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(4 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[5] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(5 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[6] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(6 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[7] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(7 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[8] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(8 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[9] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(9 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[10] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(10 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[11] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(11 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[12] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(12 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[13] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(13 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[14] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(14 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: rectangle
+                          position: "{{ dots[15] }}"
+                          size: [2, 2]
+                          color: "{{ confetti_colours[(15 + repeat.index) % 8] }}"
+                          filled: true
+                        - type: text
+                          content: QUEST
+                          position: [32, 3]
+                          font: ELEVEN_PIX
+                          color: "{{ shout }}"
+                          align: center
+                        - type: text
+                          content: COMPLETE
+                          position: [32, 16]
+                          font: ELEVEN_PIX
+                          color: "{{ shout_2 }}"
+                          align: center
+                        - type: text
+                          content: "{{ done_lines[0] if done_lines | count > 0 else '' }}"
+                          position: [32, 31]
+                          font: PICO_8
+                          color: [255, 235, 200]
+                          align: center
+                        - type: text
+                          content: "{{ done_lines[1] if done_lines | count > 1 else '' }}"
+                          position: [32, 38]
+                          font: PICO_8
+                          color: [255, 235, 200]
+                          align: center
+                        - type: text
+                          content: "{{ done_lines[2] if done_lines | count > 2 else '' }}"
+                          position: [32, 45]
+                          font: PICO_8
+                          color: [255, 235, 200]
+                          align: center
+                        - type: text
+                          content: "{% if (done.get('points') | int(0)) > 0 %}{{ done.get('points') }} QP{% endif %}"
+                          position: [2, 57]
+                          font: PICO_8
+                          color: "{{ accent }}"
+                        - type: text
+                          content: "{{ quest_count }}"
+                          position: [62, 57]
+                          font: PICO_8
+                          color: [200, 170, 120]
+                          align: right
+                - delay:
+                    seconds: "{{ floor }}"
+
+      # ----------------------------------------------------------------- quest
+      # The quest you are on: while a step of it just landed, over whatever
+      # XP is trickling in, and in place of the standby screen while one is in
+      # progress and nothing is training. A quest grants no XP until it is
+      # done, so this is the only screen a quester would otherwise get.
+      - conditions: "{{ quest_screen and quest.get('in_progress') and (questing or active < 1) }}"
+        sequence:
+          - action: divoom_pixoo.show_message
+            continue_on_error: true
+            target:
+              entity_id: !input panel
+            data:
+              page_data:
+                page_type: components
+                components:
+                  - type: rectangle
+                    position: [0, 0]
+                    size: [64, 64]
+                    color: "{{ bg }}"
+                    filled: true
+                  - type: rectangle
+                    position: [0, 0]
+                    size: ["{{ [ [ ((hp_pct | int(0)) * 0.64) | round | int, 1 ] | max, 64 ] | min }}", 2]
+                    color: "{{ hp_color }}"
+                    filled: true
+                  - type: text
+                    content: QUEST
+                    position: [2, 5]
+                    font: PICO_8
+                    color: "{{ accent }}"
+                  - type: text
+                    content: "{{ quest_count }}"
+                    position: [62, 5]
+                    font: PICO_8
+                    color: [200, 170, 120]
+                    align: right
+                  - type: rectangle
+                    position: [0, 13]
+                    size: [64, 1]
+                    color: [90, 74, 54]
+                    filled: true
+                  - type: text
+                    content: "{{ quest_lines[0] if quest_lines | count > 0 else '' }}"
+                    position: [2, 16]
+                    font: PICO_8
+                    color: [255, 235, 200]
+                  - type: text
+                    content: "{{ quest_lines[1] if quest_lines | count > 1 else '' }}"
+                    position: [2, 23]
+                    font: PICO_8
+                    color: [255, 235, 200]
+                  - type: text
+                    content: "{{ quest_lines[2] if quest_lines | count > 2 else '' }}"
+                    position: [2, 30]
+                    font: PICO_8
+                    color: [255, 235, 200]
+                  - type: text
+                    content: "{% if idle %}IDLE{% else %}IN PROGRESS{% endif %}"
+                    position: [2, 38]
+                    font: PICO_8
+                    color: "{% if idle %}[255,180,0]{% else %}[140,200,255]{% endif %}"
+                  - type: text
+                    content: HP
+                    position: [2, 45]
+                    font: PICO_8
+                    color: [200, 170, 120]
+                  - type: rectangle
+                    position: [22, 44]
+                    size: [40, 7]
+                    color: [72, 60, 44]
+                    filled: true
+                  - type: rectangle
+                    position: [22, 44]
+                    size: ["{{ [ [ ((hp_pct | int(0)) * 0.4) | round | int, 1 ] | max, 40 ] | min }}", 7]
+                    color: "{{ hp_color }}"
+                    filled: true
+                  - type: text
+                    content: PRAY
+                    position: [2, 55]
+                    font: PICO_8
+                    color: [200, 170, 120]
+                  - type: rectangle
+                    position: [22, 54]
+                    size: [40, 7]
+                    color: [72, 60, 44]
+                    filled: true
+                  - type: rectangle
+                    position: [22, 54]
+                    size: ["{{ [ [ ((pray_pct | int(0)) * 0.4) | round | int, 1 ] | max, 40 ] | min }}", 7]
+                    color: "{% if (pray_pct | int(-1)) < 0 %}{{ bg }}{% else %}[140,200,255]{% endif %}"
+                    filled: true
+
       # ---------------------------------------------------------------- combat
       # Everything gaining XP is a combat skill. The heading is the attack
       # style, which is read off from which of attack/strength/defence are
@@ -565,6 +884,9 @@ actions:
 
   # The floor, and the reason this script runs queued rather than single: a
   # rate limit may delay a render, it may not forget one. Dropping the trigger
-  # is how IDLE ends up arriving a minute late.
-  - delay:
-      seconds: "{{ floor }}"
+  # is how IDLE ends up arriving a minute late. The celebration paces its
+  # own frames on the same floor and skips this one.
+  - if: "{{ not celebrating }}"
+    then:
+      - delay:
+          seconds: "{{ floor }}"

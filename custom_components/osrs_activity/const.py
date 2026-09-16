@@ -170,6 +170,24 @@ TASK_ABBREVIATIONS: dict[str, str] = {
 # picked for the task itself.
 NO_TASK = frozenset({"", "none", "null", "unknown", "unavailable"})
 
+# The plugin's quest completion event. Carries the quest name and the quest
+# point total after it, but not who -- the same limit as the idle events.
+EVENT_QUEST_COMPLETE = "runelite_quest_complete_notify"
+
+# How long a completed quest is flagged as `celebrating` after the event. Long
+# enough for a display to run its animation and for a slow redraw to still
+# catch it; short enough that the panel is back to work before the next
+# quest's first step lands. Anything that wants the name afterwards has
+# `quest_complete`, which stays until the next completion.
+CELEBRATE_SECONDS = 20
+
+# A quest name wrapped for a 64px panel: PICO_8 is 4px per character, so
+# fifteen fit on a line with a two-pixel margin either side, and three lines
+# is what the quest screen has room for under its heading. The longest name
+# in the game today ("Desert Treasure II - The Fallen Empire") wraps to three.
+QUEST_LINE_MAX = 15
+QUEST_LINES_MAX = 3
+
 # One colour per skill, chosen for telling them APART inside a group that runs
 # together -- not for fidelity to the wiki. The combat set is the one most often
 # active at the same time, so those sit far apart; the same was done for the

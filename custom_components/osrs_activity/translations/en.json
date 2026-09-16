@@ -51,6 +51,9 @@
       },
       "combat_style": {
         "name": "Combat style"
+      },
+      "quest": {
+        "name": "Quest"
       }
     },
     "binary_sensor": {

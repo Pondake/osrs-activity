@@ -20,7 +20,7 @@ optional, and neither needs its own install.
 
 ## What you get
 
-One device per player, with seven entities.
+One device per player, with eight entities.
 
 | Entity | State | Good for |
 |---|---|---|
@@ -29,6 +29,7 @@ One device per player, with seven entities.
 | **XP gained** | XP gained this sitting | a graph of your evening |
 | **XP per hour** | rate, from the start of the sitting | is this method actually faster |
 | **Combat style** | `AGGRESSIVE`, `RANGED`, `BLOODVELDS`, … | switching a light when you switch styles |
+| **Quest** | the quest you last worked on | something to celebrate when you finish one |
 | **Idle** | on when you are standing around | a nudge when you have been afk for a while |
 | **Online** | on while the plugin is still pushing | knowing you logged out, without polling |
 
@@ -36,7 +37,8 @@ One device per player, with seven entities.
 the blueprint want. Its attributes carry
 `skills` (what is happening now), `window_skills` (everything with a counter
 still running), `top`, `combat`, `style`, `slayer`, `slayer_kills`,
-`total_gained_short` and the idle state — and every skill row comes with a
+`total_gained_short`, `quest`, `questing`, `celebrating`,
+`quest_complete` and the idle state — and every skill row comes with a
 label that fits in four characters, a colour, a percentage through the current
 level, and a path to its icon.
 
@@ -51,6 +53,13 @@ level, and a path to its icon.
 `slayer` is `{}` unless you switch **Slayer task** on in the plugin — see
 below. When it is there it carries `task`, `remaining`, `initial`, `done`,
 `pct`, `location`, `streak` and `points`.
+
+`quest` is `{}` unless you switch **Quest progress** on in the plugin. When it
+is there it carries the name, the name already wrapped to `lines` that fit the
+panel, RuneLite's `state` for it, the `stage`, and your quest totals.
+`questing` is on while a step of it landed inside the session window.
+`celebrating` is on for twenty seconds after you complete one, and
+`quest_complete` keeps the name and quest points of the last one after that.
 
 You do not have to touch any of that, though. **A dashboard card comes with the
 integration** — it appears in the card picker as *OSRS Activity*, takes one
@@ -109,6 +118,9 @@ Two more are worth having and both are off by default:
   screen, in place of the kill count guessed from your XP. It reads RuneLite's
   own Slayer plugin, so that one has to be enabled too — if it is not, nothing
   writes the task and this stays empty.
+- **Quest progress** drives the quest screen, and **Quest complete events**
+  the confetti when you finish one. The confetti also works with only the
+  first one on, a moment later, because the quest going finished is enough.
 
 ### The RuneLite integration
 
@@ -211,11 +223,17 @@ chosen automatically from what the sensors report:
 | one skill in focus | that skill, gained, rate, and the bar to the next level |
 | more than one skill | up to five, bars scaled against the biggest gainer |
 | logged in, nothing training | your name, health and prayer |
+| a quest step just landed, or one is in progress and nothing is training | the quest's name, your quest count, health and prayer |
+| a quest was just completed | four frames of confetti with the quest's name and your quest points |
 
 The bars scale against the biggest gainer *inside the focus* rather than
 against an absolute figure. That makes a combat sitting read as a ratio
 (2:1:1 strength/attack/hitpoints) and makes the same scale work for Wintertodt
 and for Zulrah without a special case for either.
+
+Both quest screens can be switched off under **Quests**, and the buzzer can
+be switched on there to go with the confetti. It is off by default: the Pixoo
+integration itself warns the buzzer may not be good for the device.
 
 Health and prayer need no setting up: the integration looks up those sensors
 for the player it is already following, and both the card and the panel read
@@ -260,6 +278,9 @@ Limits of what the RuneLite plugin sends, not of what this does with it.
 not which account it was, so with two players logged in at once there is no
 telling them apart. Fine as long as only one plays at a time; fixable only on
 the plugin side.
+
+**The quest complete event does not say who either.** With two players
+logged in, both panels celebrate.
 
 **Without the Slayer task toggle, kills are derived rather than read.** Slayer
 XP arrives in a fixed amount per kill, so a run of equal chunks counts kills.

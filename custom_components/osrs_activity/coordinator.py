@@ -1,8 +1,8 @@
 """Wiring between Home Assistant and the activity engine.
 
-Four inputs: the RuneLite skill sensors changing, the plugin's two idle events,
-the slayer task sensor, and a clock. One output: a snapshot, dispatched to the
-entities when it differs from the last one.
+Five inputs: the RuneLite skill sensors changing, the plugin's idle and quest
+events, the slayer task and last quest sensors, and a clock. One output: a
+snapshot, dispatched to the entities when it differs from the last one.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from homeassistant.helpers.event import (
 from .const import (
     EVENT_ACTIVE,
     EVENT_IDLE,
+    EVENT_QUEST_COMPLETE,
     ICON_BLANK,
     ICON_DIR,
     PING_TIMEOUT,
@@ -30,7 +31,7 @@ from .const import (
     TICK_SECONDS,
     VITALS,
 )
-from .engine import ActivityEngine, SlayerTask, task_name
+from .engine import ActivityEngine, Quest, SlayerTask, task_name
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +49,10 @@ STATUS_MARKER = "_player_status"
 # it is off by default, and the entity only exists on a recent enough build of
 # the RuneLite integration, so nothing here may assume it is there.
 SLAYER_MARKER = "_slayer_task"
+# The last quest sensor, same arrangement: written when the plugin's Quest
+# progress toggle is on, and only present on a RuneLite integration recent
+# enough to have it.
+QUEST_MARKER = "_last_quest"
 
 
 def sanitize(text: str) -> str:
@@ -81,9 +86,13 @@ class ActivityCoordinator:
         self._slayer_uid = (
             f"{RUNELITE_DOMAIN}_{sanitize(username)}{SLAYER_MARKER}"
         )
+        self._quest_uid = (
+            f"{RUNELITE_DOMAIN}_{sanitize(username)}{QUEST_MARKER}"
+        )
         self._entities: dict[str, str] = {}  # entity_id -> skill
         self._status_entity: str | None = None
         self._slayer_entity: str | None = None
+        self._quest_entity: str | None = None
         self._vitals: dict[str, str] = {}  # role -> entity_id
         self._unsub_states = None
         self._unsubs: list = []
@@ -103,6 +112,11 @@ class ActivityCoordinator:
         )
         self._unsubs.append(
             self.hass.bus.async_listen(EVENT_ACTIVE, self._handle_active)
+        )
+        self._unsubs.append(
+            self.hass.bus.async_listen(
+                EVENT_QUEST_COMPLETE, self._handle_quest_complete
+            )
         )
         self._unsubs.append(
             self.hass.bus.async_listen(
@@ -139,6 +153,7 @@ class ActivityCoordinator:
         found: dict[str, str] = {}
         status = None
         slayer = None
+        quest = None
         prefix = f"{RUNELITE_DOMAIN}_{sanitize(self.username)}"
         wanted = {
             template.format(prefix=prefix): role
@@ -154,6 +169,9 @@ class ActivityCoordinator:
             if entry.unique_id == self._slayer_uid:
                 slayer = entry.entity_id
                 continue
+            if entry.unique_id == self._quest_uid:
+                quest = entry.entity_id
+                continue
             if entry.unique_id in wanted:
                 vitals[wanted[entry.unique_id]] = entry.entity_id
                 # skill_hitpoints is also a skill, so no continue here.
@@ -168,17 +186,19 @@ class ActivityCoordinator:
             found == self._entities
             and status == self._status_entity
             and slayer == self._slayer_entity
+            and quest == self._quest_entity
         ):
             return
 
         self._entities = found
         self._status_entity = status
         self._slayer_entity = slayer
+        self._quest_entity = quest
         if self._unsub_states:
             self._unsub_states()
             self._unsub_states = None
         watched = list(found) + [
-            entity for entity in (status, slayer) if entity
+            entity for entity in (status, slayer, quest) if entity
         ]
         if watched:
             self._unsub_states = async_track_state_change_event(
@@ -230,11 +250,13 @@ class ActivityCoordinator:
             return
         skill = self._entities.get(event.data["entity_id"])
         if skill is None:
-            # The status and slayer task sensors are watched too, so a login
-            # and a new task show up without waiting for the tick.
+            # The status, slayer task and quest sensors are watched too, so
+            # a login, a new task and a quest step show up without waiting
+            # for the tick.
             if event.data["entity_id"] in (
                 self._status_entity,
                 self._slayer_entity,
+                self._quest_entity,
             ):
                 self._publish()
             return
@@ -271,6 +293,24 @@ class ActivityCoordinator:
         self._publish()
 
     @callback
+    def _handle_quest_complete(self, event: Event) -> None:
+        """The plugin says a quest was just completed.
+
+        Like the idle events it does not say who, so with two players logged
+        in the celebration goes to both. The sensor going FINISHED is the
+        second route to the same place, for a plugin with this event switched
+        off; the engine treats the two as one completion.
+        """
+        data = event.data or {}
+        name = task_name(data.get("quest"))
+        if name is None:
+            return
+        self.engine.mark_quest_complete(
+            name, _as_int(data.get("quest_points")) or 0, datetime.now()
+        )
+        self._publish()
+
+    @callback
     def _handle_tick(self, _now) -> None:
         self._publish()
 
@@ -295,7 +335,10 @@ class ActivityCoordinator:
                 )
         self._was_online = online
 
-        data = self.engine.snapshot(datetime.now(), self._task())
+        now = datetime.now()
+        quest = self._quest()
+        self.engine.note_quest(quest, now)
+        data = self.engine.snapshot(now, self._task(), quest)
         self._decorate(data, online, ping)
 
         signature = (
@@ -314,6 +357,12 @@ class ActivityCoordinator:
             # this adds no redraws, it only stops the count going stale when
             # the last thing to change was the task itself.
             (data["slayer"].get("task"), data["slayer"].get("remaining")),
+            # A quest step, and the two flags a display switches screens on.
+            # The completion itself is in here by way of celebrating going
+            # up; it going down again is what sends the panel back to work.
+            (data["quest"].get("quest"), data["quest"].get("stage")),
+            data["questing"],
+            data["celebrating"],
         )
         if not force and signature == self._last_signature:
             return
@@ -382,6 +431,31 @@ class ActivityCoordinator:
             location=task_name(state.attributes.get("task_location")) or "",
             streak=_as_int(state.attributes.get("streak")) or 0,
             points=_as_int(state.attributes.get("points")) or 0,
+        )
+
+    def _quest(self) -> Quest | None:
+        """The last quest touched, or None when there is nothing to read.
+
+        Absent for the same three reasons as the slayer task: no such entity
+        on an older RuneLite integration, nothing written while the plugin's
+        Quest progress toggle is off, and "None" as a value once it is on but
+        no quest variable has moved since login.
+        """
+        if not self._quest_entity:
+            return None
+        state = self.hass.states.get(self._quest_entity)
+        if state is None:
+            return None
+        name = task_name(state.attributes.get("quest")) or task_name(state.state)
+        if name is None:
+            return None
+        return Quest(
+            name=name,
+            state=str(state.attributes.get("state") or "UNKNOWN").upper(),
+            stage=_as_int(state.attributes.get("stage")) or 0,
+            points=_as_int(state.attributes.get("quest_points")) or 0,
+            completed=_as_int(state.attributes.get("completed")) or 0,
+            total=_as_int(state.attributes.get("total")) or 0,
         )
 
     def _vital(self, now_role: str, max_role: str) -> int | None:

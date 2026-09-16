@@ -41,6 +41,7 @@ async def async_setup_entry(
             SessionXpSensor(coordinator),
             XpPerHourSensor(coordinator),
             CombatStyleSensor(coordinator),
+            QuestSensor(coordinator),
         ]
     )
 
@@ -151,6 +152,34 @@ class XpPerHourSensor(OsrsActivityEntity, SensorEntity):
     @property
     def native_value(self) -> int:
         return self.data.get("per_hour", 0)
+
+
+class QuestSensor(OsrsActivityEntity, SensorEntity):
+    """The quest last worked on, and whether that was just now.
+
+    Empty until the Quest progress toggle is on in the RuneLite plugin. The
+    state is the quest's name; `questing` says a step of it landed inside the
+    session window, and `celebrating` is up for a few seconds after one is
+    completed -- which is what a display draws its fanfare on.
+    """
+
+    _attr_icon = "mdi:script-text"
+
+    def __init__(self, coordinator: ActivityCoordinator) -> None:
+        super().__init__(coordinator, "quest")
+
+    @property
+    def native_value(self) -> str | None:
+        return self.data.get("quest", {}).get("quest") or None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            **self.data.get("quest", {}),
+            "questing": self.data.get("questing", False),
+            "celebrating": self.data.get("celebrating", False),
+            "last_completed": self.data.get("quest_complete", {}),
+        }
 
 
 class CombatStyleSensor(OsrsActivityEntity, SensorEntity):

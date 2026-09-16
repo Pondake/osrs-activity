@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from .const import (
+    CELEBRATE_SECONDS,
     COLOUR_FALLBACK,
     COLOURS,
     COMBAT_SKILLS,
@@ -28,6 +29,8 @@ from .const import (
     MELEE_STYLES,
     NO_TASK,
     NOT_A_STYLE,
+    QUEST_LINE_MAX,
+    QUEST_LINES_MAX,
     TASK_ABBREVIATIONS,
     TASK_LABEL_MAX,
 )
@@ -134,6 +137,84 @@ def colour_for(skill: str) -> tuple[int, int, int]:
     return COLOURS.get(skill, COLOUR_FALLBACK)
 
 
+def wrap_name(
+    name: str, width: int = QUEST_LINE_MAX, lines: int = QUEST_LINES_MAX
+) -> list[str]:
+    """A name as lines that fit a panel, breaking on words, upper-cased.
+
+    Upper-cased here because the Pixoo integration upper-cases every string
+    it draws anyway, and measuring the wrap against what will actually be
+    drawn is the only way to know the width is right. A word longer than a
+    line is cut rather than left to overflow, and the last line is cut when
+    the name runs past the room there is: a name that does not fit is still
+    better told apart by its first three lines than by nothing.
+    """
+    out: list[str] = []
+    current = ""
+    for word in name.upper().split():
+        while len(word) > width:
+            if current:
+                out.append(current)
+                current = ""
+            out.append(word[:width])
+            word = word[width:]
+        candidate = f"{current} {word}" if current else word
+        if len(candidate) <= width:
+            current = candidate
+        else:
+            out.append(current)
+            current = word
+    if current:
+        out.append(current)
+    return out[:lines]
+
+
+@dataclass(frozen=True)
+class Quest:
+    """The quest the game says was worked on last, passed in from outside.
+
+    Read off the RuneLite integration's last-quest sensor, which the plugin
+    writes whenever a quest's progress variable moves. Like SlayerTask it is
+    not this file's state: handed in per snapshot, never stored. `state` is
+    RuneLite's own word for it -- NOT_STARTED, IN_PROGRESS, FINISHED, or
+    UNKNOWN for a quest the client has a variable for but no entry in its
+    quest list.
+    """
+
+    name: str
+    state: str = "UNKNOWN"
+    stage: int = 0
+    points: int = 0
+    completed: int = 0
+    total: int = 0
+
+    @property
+    def in_progress(self) -> bool:
+        return self.state == "IN_PROGRESS"
+
+    @property
+    def finished(self) -> bool:
+        return self.state == "FINISHED"
+
+    def as_row(self) -> dict:
+        return {
+            "quest": self.name,
+            "lines": wrap_name(self.name),
+            "state": self.state,
+            "in_progress": self.in_progress,
+            "finished": self.finished,
+            "stage": self.stage,
+            "points": self.points,
+            "completed": self.completed,
+            "total": self.total,
+            "pct": (
+                max(0, min(100, round(self.completed * 100 / self.total)))
+                if self.total
+                else 0
+            ),
+        }
+
+
 @dataclass(frozen=True)
 class SlayerTask:
     """The task the game itself knows about, passed in from outside.
@@ -235,6 +316,17 @@ class ActivityEngine:
     # automation can tell "back from a two-second pause" from "back after ten
     # minutes" at the moment the player returns.
     last_idle_seconds: int = 0
+    # The quest as last seen, (name, stage, state), so that a change in it can
+    # be told from a first read. Questing produces no XP, so this is the only
+    # evidence there is that the player is doing anything at all.
+    quest_seen: tuple[str, int, str] | None = None
+    quest_moved_at: datetime | None = None
+    # The last quest completed, and when. Set by the plugin's completion
+    # event, or by the sensor flipping to FINISHED for anyone with that event
+    # switched off -- whichever arrives first, the other is ignored.
+    completed_quest: str | None = None
+    completed_points: int = 0
+    completed_at: datetime | None = None
 
     def record(
         self, skill: str, xp: int, previous: int | None, now: datetime
@@ -295,6 +387,52 @@ class ActivityEngine:
         self.idle_at = None
         self.idle_ticks = 0
 
+    def note_quest(self, quest: Quest | None, now: datetime) -> bool:
+        """Fold in what the quest sensor says. Returns True if it moved.
+
+        The first read after a start is not a move: the sensor restores its
+        last value, and treating that as fresh progress would put the quest
+        screen up for anyone who logged in days after their last step. A
+        different name or stage after that is. A quest going FINISHED counts
+        as a completion too, so the celebration does not depend on the
+        plugin's event toggle -- see mark_quest_complete for the dedupe.
+        """
+        if quest is None:
+            return False
+        key = (quest.name, quest.stage, quest.state)
+        previous = self.quest_seen
+        self.quest_seen = key
+        if previous is None or previous == key:
+            return False
+        self.quest_moved_at = now
+        if (
+            quest.finished
+            and previous[0] == quest.name
+            and previous[2] != "FINISHED"
+        ):
+            self.mark_quest_complete(quest.name, quest.points, now)
+        return True
+
+    def mark_quest_complete(self, name: str, points: int, now: datetime) -> bool:
+        """A quest was just completed. Returns True if it counts as new.
+
+        Two sources report the same completion within a second of each other
+        -- the event and the sensor's own state change -- so a repeat of the
+        same name inside the celebration window is the same completion, and
+        only its point total is taken from it.
+        """
+        if (
+            self.completed_quest == name
+            and self.completed_at is not None
+            and (now - self.completed_at).total_seconds() <= CELEBRATE_SECONDS
+        ):
+            self.completed_points = points or self.completed_points
+            return False
+        self.completed_quest = name
+        self.completed_points = points
+        self.completed_at = now
+        return True
+
     def end(self) -> int:
         """Drop every counter. Returns how many there were.
 
@@ -306,6 +444,7 @@ class ActivityEngine:
         self.sessions.clear()
         self.idle_at = None
         self.idle_ticks = 0
+        self.quest_moved_at = None
         return count
 
     def restore(self, raw: dict) -> int:
@@ -351,11 +490,17 @@ class ActivityEngine:
             ),
         }
 
-    def snapshot(self, now: datetime, task: SlayerTask | None = None) -> dict:
+    def snapshot(
+        self,
+        now: datetime,
+        task: SlayerTask | None = None,
+        quest: Quest | None = None,
+    ) -> dict:
         """Everything a display could want, recomputed from the sessions.
 
         `task` is the live slayer task, or None when the player has none or
         never reports one. It is only ever read here -- see SlayerTask.
+        `quest` is the same arrangement for the last quest touched.
         """
         rows = [
             self._row(skill, session, now)
@@ -419,6 +564,23 @@ class ActivityEngine:
         style, style_key = self._style(focus, keys, task) if combat else ("", "")
 
         total = sum(row["gained"] for row in focus)
+
+        # Questing, for a display, is a quest in progress whose stage moved
+        # inside the session window: the same "still at it" threshold the XP
+        # counters use, because a quest step, like a kill, can be minutes
+        # apart from the next one. A quest that is merely in progress -- as
+        # most players have several -- is on the row for whoever wants it,
+        # but does not by itself say the player is doing it now.
+        questing = bool(
+            quest
+            and quest.in_progress
+            and self.quest_moved_at is not None
+            and now - self.quest_moved_at <= self.window
+        )
+        celebrating = (
+            self.completed_at is not None
+            and (now - self.completed_at).total_seconds() <= CELEBRATE_SECONDS
+        )
         return {
             "active": len(rows),
             "focus_n": len(focus),
@@ -436,6 +598,26 @@ class ActivityEngine:
             "slayer_kills": next(
                 (row["kills"] for row in focus if row["key"] == "slayer"), 0
             ),
+            "quest": quest.as_row() if quest else {},
+            "questing": questing,
+            # The last completion, for as long as this engine lives, and a
+            # flag that is only up for CELEBRATE_SECONDS after it. A display
+            # draws its celebration on the flag and goes back to work when it
+            # drops; anything that wants the name afterwards has the row.
+            "quest_complete": (
+                {
+                    "quest": self.completed_quest,
+                    "lines": wrap_name(self.completed_quest),
+                    "points": self.completed_points,
+                    "at": self.completed_at.isoformat(timespec="seconds"),
+                    "seconds_ago": int(
+                        (now - self.completed_at).total_seconds()
+                    ),
+                }
+                if self.completed_quest and self.completed_at
+                else {}
+            ),
+            "celebrating": celebrating,
             "total_gained": total,
             "total_gained_short": short(total),
             "per_hour": sum(row["per_hour"] for row in focus),
