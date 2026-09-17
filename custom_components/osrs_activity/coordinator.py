@@ -377,6 +377,7 @@ class ActivityCoordinator:
             row["icon_url"] = self._icon_url(row["key"])
         data["style_icon"] = self._icon_path(data["style_key"])
         data["style_icon_url"] = self._icon_url(data["style_key"])
+        data["quest_icon"] = self._icon_path("quest")
         data["account"] = self.username
         data["online"], data["last_ping"] = online, ping
         data["health_pct"] = self._vital("health", "health_max")

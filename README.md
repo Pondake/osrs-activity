@@ -223,7 +223,7 @@ chosen automatically from what the sensors report:
 | one skill in focus | that skill, gained, rate, and the bar to the next level |
 | more than one skill | up to five, bars scaled against the biggest gainer |
 | logged in, nothing training | your name, health and prayer |
-| a quest step just landed, or one is in progress and nothing is training | the quest's name, your quest count, health and prayer |
+| a quest step just landed, or one is in progress and nothing is training | the quest's name and stage, your quest points, and a bar of quests completed |
 | a quest was just completed | four frames of confetti with the quest's name and your quest points |
 
 The bars scale against the biggest gainer *inside the focus* rather than

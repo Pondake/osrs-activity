@@ -90,6 +90,13 @@ SKILLS: tuple[str, ...] = (
     "farming", "runecraft", "hunter", "construction", "sailing",
 )
 
+# Icons that are not a skill, keyed by the stem they are saved under, with the
+# wiki file they come from. Fetched alongside the skills and resolved the same
+# way, so a missing one falls back to the transparent stand-in.
+EXTRA_ICONS: dict[str, str] = {
+    "quest": "Quest point icon.png",
+}
+
 # What counts as combat. Prayer belongs here: it ticks along while you pray,
 # and a prayer bonus does not turn a fight into something else.
 COMBAT_SKILLS = frozenset({

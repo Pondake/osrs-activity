@@ -16,7 +16,7 @@ from pathlib import Path
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import ICON_BOX, ICON_DIR, SKILLS
+from .const import EXTRA_ICONS, ICON_BOX, ICON_DIR, SKILLS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,10 +36,19 @@ async def async_ensure_icons(hass: HomeAssistant) -> dict | None:
     restart would hammer a volunteer-run wiki for nothing.
     """
     target = Path(hass.config.path("www")) / ICON_DIR
-    if await hass.async_add_executor_job(_has_icons, target):
+    # An install from before an extra icon existed has every skill but not
+    # that one. Fetching only what is missing is one request, not two dozen,
+    # and once it is there this is a no-op again.
+    if await hass.async_add_executor_job(
+        _has_icons, target
+    ) and await hass.async_add_executor_job(_has_extras, target):
         return None
     _LOGGER.info("Fetching the OSRS skill icons, once")
     return await async_download_icons(hass)
+
+
+def _has_extras(target: Path) -> bool:
+    return all((target / f"{stem}.png").exists() for stem in EXTRA_ICONS)
 
 
 def _has_icons(target: Path) -> bool:
@@ -62,13 +71,15 @@ async def async_download_icons(
     session = async_get_clientsession(hass)
     fetched, skipped, failed = 0, 0, []
 
-    for skill in SKILLS:
+    wanted = {skill: f"{skill.capitalize()} icon.png" for skill in SKILLS}
+    wanted.update(EXTRA_ICONS)
+    for skill, title in wanted.items():
         path = target / f"{skill}.png"
         if not overwrite and await hass.async_add_executor_job(path.exists):
             skipped += 1
             continue
         try:
-            url = await _async_find_file(session, skill)
+            url = await _async_find_file(session, title)
             if not url:
                 failed.append(skill)
                 continue
@@ -90,8 +101,8 @@ async def async_download_icons(
     return {"fetched": fetched, "skipped": skipped, "failed": failed}
 
 
-async def _async_find_file(session, skill: str) -> str | None:
-    """The wiki names them "<Skill> icon.png" consistently.
+async def _async_find_file(session, title: str) -> str | None:
+    """The wiki names skill icons "<Skill> icon.png" consistently.
 
     Asked for through imageinfo because the file URL contains a hash path that
     cannot be guessed.
@@ -100,7 +111,7 @@ async def _async_find_file(session, skill: str) -> str | None:
         "action": "query",
         "prop": "imageinfo",
         "iiprop": "url",
-        "titles": f"File:{skill.capitalize()} icon.png",
+        "titles": f"File:{title}",
         "format": "json",
         "redirects": "1",
     }

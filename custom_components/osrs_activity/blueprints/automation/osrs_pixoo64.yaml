@@ -392,6 +392,11 @@ actions:
       # XP is trickling in, and in place of the standby screen while one is in
       # progress and nothing is training. A quest grants no XP until it is
       # done, so this is the only screen a quester would otherwise get.
+      #
+      # No health or prayer here, on purpose: nothing about a quest step says
+      # you are in a fight, and the room goes to the quest instead. Top half
+      # is you -- quest points and where this quest is at -- and the bottom
+      # half is the quest and how far through the quest list you are.
       - conditions: "{{ quest_screen and quest.get('in_progress') and (questing or active < 1) }}"
         sequence:
           - action: divoom_pixoo.show_message
@@ -407,77 +412,71 @@ actions:
                     size: [64, 64]
                     color: "{{ bg }}"
                     filled: true
-                  - type: rectangle
-                    position: [0, 0]
-                    size: ["{{ [ [ ((hp_pct | int(0)) * 0.64) | round | int, 1 ] | max, 64 ] | min }}", 2]
-                    color: "{{ hp_color }}"
-                    filled: true
+                  - type: image
+                    image_path: "{{ state_attr(activity, 'quest_icon') }}"
+                    position: [0, 1]
+                    resample_mode: nearest
                   - type: text
-                    content: QUEST
-                    position: [2, 5]
+                    content: "{{ quest.get('points') | int(0) }}"
+                    position: [28, 3]
+                    font: ELEVEN_PIX
+                    color: [255, 215, 0]
+                  - type: text
+                    content: QP
+                    position: [62, 9]
                     font: PICO_8
                     color: "{{ accent }}"
-                  - type: text
-                    content: "{{ quest_count }}"
-                    position: [62, 5]
-                    font: PICO_8
-                    color: [200, 170, 120]
                     align: right
+                  # The stage is the quest's own progress variable, not a step
+                  # count -- it jumps 10, 20, 30 on most quests and has no
+                  # known end. What it is good for is showing that something
+                  # just moved.
+                  - type: text
+                    content: "{% if idle %}IDLE{% else %}STAGE {{ quest.get('stage') | int(0) }}{% endif %}"
+                    position: [28, 18]
+                    font: PICO_8
+                    color: "{% if idle %}[255,180,0]{% else %}[140,200,255]{% endif %}"
                   - type: rectangle
-                    position: [0, 13]
+                    position: [0, 26]
                     size: [64, 1]
                     color: [90, 74, 54]
                     filled: true
                   - type: text
                     content: "{{ quest_lines[0] if quest_lines | count > 0 else '' }}"
-                    position: [2, 16]
-                    font: PICO_8
-                    color: [255, 235, 200]
-                  - type: text
-                    content: "{{ quest_lines[1] if quest_lines | count > 1 else '' }}"
-                    position: [2, 23]
-                    font: PICO_8
-                    color: [255, 235, 200]
-                  - type: text
-                    content: "{{ quest_lines[2] if quest_lines | count > 2 else '' }}"
                     position: [2, 30]
                     font: PICO_8
                     color: [255, 235, 200]
                   - type: text
-                    content: "{% if idle %}IDLE{% else %}IN PROGRESS{% endif %}"
-                    position: [2, 38]
+                    content: "{{ quest_lines[1] if quest_lines | count > 1 else '' }}"
+                    position: [2, 37]
                     font: PICO_8
-                    color: "{% if idle %}[255,180,0]{% else %}[140,200,255]{% endif %}"
+                    color: [255, 235, 200]
                   - type: text
-                    content: HP
-                    position: [2, 45]
+                    content: "{{ quest_lines[2] if quest_lines | count > 2 else '' }}"
+                    position: [2, 44]
                     font: PICO_8
-                    color: [200, 170, 120]
+                    color: [255, 235, 200]
                   - type: rectangle
-                    position: [22, 44]
-                    size: [40, 7]
+                    position: [2, 51]
+                    size: [60, 3]
                     color: [72, 60, 44]
                     filled: true
                   - type: rectangle
-                    position: [22, 44]
-                    size: ["{{ [ [ ((hp_pct | int(0)) * 0.4) | round | int, 1 ] | max, 40 ] | min }}", 7]
-                    color: "{{ hp_color }}"
+                    position: [2, 51]
+                    size: ["{{ [ ((quest.get('pct') | int(0)) * 0.6) | round | int, 1 ] | max }}", 3]
+                    color: "{{ accent }}"
                     filled: true
                   - type: text
-                    content: PRAY
-                    position: [2, 55]
+                    content: "{{ quest_count }}"
+                    position: [2, 57]
                     font: PICO_8
                     color: [200, 170, 120]
-                  - type: rectangle
-                    position: [22, 54]
-                    size: [40, 7]
-                    color: [72, 60, 44]
-                    filled: true
-                  - type: rectangle
-                    position: [22, 54]
-                    size: ["{{ [ [ ((pray_pct | int(0)) * 0.4) | round | int, 1 ] | max, 40 ] | min }}", 7]
-                    color: "{% if (pray_pct | int(-1)) < 0 %}{{ bg }}{% else %}[140,200,255]{% endif %}"
-                    filled: true
+                  - type: text
+                    content: "{% if (quest.get('total') | int(0)) > 0 %}{{ quest.get('pct') | int(0) }}%{% endif %}"
+                    position: [62, 57]
+                    font: PICO_8
+                    color: [140, 120, 90]
+                    align: right
 
       # ---------------------------------------------------------------- combat
       # Everything gaining XP is a combat skill. The heading is the attack
