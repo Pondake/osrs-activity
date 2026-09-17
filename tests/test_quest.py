@@ -203,3 +203,55 @@ def test_a_second_quest_is_a_new_celebration():
     assert eng.snapshot(T0 + timedelta(seconds=6))["quest_complete"]["quest"] == (
         "Monkey Madness II"
     )
+
+
+def test_an_event_for_a_quest_nobody_saw_in_progress_is_ignored():
+    """What a player with every quest done got: a finished quest's var
+
+    moved, the plugin had nothing to compare it against, and the panel
+    congratulated them on a quest from years ago.
+    """
+    eng = make()
+    eng.note_quest(quest(name="Fallen From Grace", state="FINISHED", stage=20), T0)
+    assert eng.note_quest_event("Fallen From Grace", 343, T0) is False
+    assert eng.snapshot(T0)["celebrating"] is False
+
+
+def test_an_event_is_believed_after_the_quest_was_seen_in_progress():
+    eng = make()
+    eng.note_quest(quest(stage=10), T0)
+    assert eng.note_quest_event("Dragon Slayer II", 320, T0 + timedelta(seconds=5))
+    assert eng.snapshot(T0 + timedelta(seconds=6))["celebrating"] is True
+
+
+def test_an_event_is_believed_when_there_is_no_quest_sensor_at_all():
+    """Quest progress off, completion events on: nothing better to go on."""
+    eng = make()
+    assert eng.note_quest_event("Dragon Slayer II", 320, T0) is True
+
+
+def test_the_same_completion_after_a_hop_is_not_celebrated_twice():
+    eng = make()
+    eng.note_quest(quest(stage=10), T0)
+    assert eng.note_quest_event("Dragon Slayer II", 320, T0)
+    # Far enough apart that the dedupe window does not cover it, which is
+    # exactly how the second one got through.
+    later = T0 + timedelta(seconds=40)
+    assert eng.note_quest_event("Dragon Slayer II", 320, later) is False
+    assert eng.snapshot(later)["quest_complete"]["at"] == T0.isoformat(
+        timespec="seconds"
+    )
+
+
+def test_a_new_run_at_the_same_quest_can_be_celebrated_again():
+    """Nothing in the game does this, but the evidence rule must not be a
+
+    one-shot latch either: seeing it in progress again arms it again.
+    """
+    eng = make()
+    eng.note_quest(quest(stage=10), T0)
+    eng.note_quest_event("Dragon Slayer II", 320, T0)
+    eng.note_quest(quest(stage=11), T0 + timedelta(minutes=1))
+    assert eng.note_quest_event(
+        "Dragon Slayer II", 320, T0 + timedelta(minutes=1, seconds=1)
+    )

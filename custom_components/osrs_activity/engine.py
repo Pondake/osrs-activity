@@ -321,6 +321,10 @@ class ActivityEngine:
     # evidence there is that the player is doing anything at all.
     quest_seen: tuple[str, int, str] | None = None
     quest_moved_at: datetime | None = None
+    # Quests this engine has seen in progress. Evidence that the player was
+    # actually working on one, which is what the completion event lacks --
+    # see note_quest_event.
+    in_progress_seen: set[str] = field(default_factory=set)
     # The last quest completed, and when. Set by the plugin's completion
     # event, or by the sensor flipping to FINISHED for anyone with that event
     # switched off -- whichever arrives first, the other is ignored.
@@ -399,6 +403,8 @@ class ActivityEngine:
         """
         if quest is None:
             return False
+        if quest.in_progress:
+            self.in_progress_seen.add(quest.name)
         key = (quest.name, quest.stage, quest.state)
         previous = self.quest_seen
         self.quest_seen = key
@@ -412,6 +418,26 @@ class ActivityEngine:
         ):
             self.mark_quest_complete(quest.name, quest.points, now)
         return True
+
+    def note_quest_event(self, name: str, points: int, now: datetime) -> bool:
+        """The plugin says a quest was completed. Believe it, or do not.
+
+        A completion is a transition, and the event carries no evidence of
+        one: a plugin that has just logged in has nothing to compare against,
+        so a quest var moving on a quest finished years ago arrives here
+        looking exactly like finishing it today. That is not hypothetical --
+        it is what a player with every quest done got.
+
+        So the event is taken on its own only while there is nothing better
+        to go on, which is the case when the Quest progress toggle is off and
+        no quest sensor is ever written. Once that sensor exists, the event
+        has to agree with it: this engine must have seen that quest in
+        progress. A real completion always leaves that trail, because the
+        quest was in progress right up until it was not.
+        """
+        if self.quest_seen is not None and name not in self.in_progress_seen:
+            return False
+        return self.mark_quest_complete(name, points, now)
 
     def mark_quest_complete(self, name: str, points: int, now: datetime) -> bool:
         """A quest was just completed. Returns True if it counts as new.
@@ -431,6 +457,11 @@ class ActivityEngine:
         self.completed_quest = name
         self.completed_points = points
         self.completed_at = now
+        # Spent. The plugin can report the same completion twice -- a world
+        # hop between the two was enough -- and the second one carries no
+        # fresh evidence, so dropping the evidence here is what stops the
+        # panel celebrating the same quest again an hour later.
+        self.in_progress_seen.discard(name)
         return True
 
     def end(self) -> int:

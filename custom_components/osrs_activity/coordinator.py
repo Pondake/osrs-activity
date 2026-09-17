@@ -300,14 +300,29 @@ class ActivityCoordinator:
         in the celebration goes to both. The sensor going FINISHED is the
         second route to the same place, for a plugin with this event switched
         off; the engine treats the two as one completion.
+
+        Handed to the engine rather than acted on here, because whether to
+        believe it at all depends on what the quest sensor has been saying --
+        see note_quest_event.
         """
         data = event.data or {}
         name = task_name(data.get("quest"))
         if name is None:
             return
-        self.engine.mark_quest_complete(
-            name, _as_int(data.get("quest_points")) or 0, datetime.now()
-        )
+        now = datetime.now()
+        # Read the sensor first: the event can beat the push that carries the
+        # same completion, and the engine judges the event against what it
+        # knows.
+        self.engine.note_quest(self._quest(), now)
+        if not self.engine.note_quest_event(
+            name, _as_int(data.get("quest_points")) or 0, now
+        ):
+            _LOGGER.debug(
+                "%s: not celebrating %s -- nothing here saw it in progress, "
+                "or it is the same completion again",
+                self.username,
+                name,
+            )
         self._publish()
 
     @callback
